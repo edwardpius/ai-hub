@@ -95,7 +95,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: research-tools
-          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:8bc89efdd28c5b9e2fae0714d57ce0b39de1f599e4695e48e0494f31cef47262
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:0dbf7e945a9c5f72e4ca401a4bb88bcd0dffe04d71c23427a9dbc44ee218a209
           command: ["/app/.venv/bin/research-tools"]
           env:
             - name: RESEARCH_TOOLS_HOST
@@ -103,7 +103,7 @@ spec:
             - name: RESEARCH_TOOLS_PORT
               value: "8080"
             - name: RESEARCH_AGENT_SEARCH_PROVIDER
-              value: brave
+              value: exa
             - name: RESEARCH_AGENT_TRACE_DIR
               value: /data/traces
             - name: RESEARCH_AGENT_FETCH_CACHE_DIR

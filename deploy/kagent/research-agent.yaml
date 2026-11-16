@@ -15,31 +15,31 @@ metadata:
 spec:
   byo: {}
   workload:
-    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:8bc89efdd28c5b9e2fae0714d57ce0b39de1f599e4695e48e0494f31cef47262
+    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:0dbf7e945a9c5f72e4ca401a4bb88bcd0dffe04d71c23427a9dbc44ee218a209
     command: ["/app/.venv/bin/research-agent-a2a"]
   env:
-    # Python gRPC's default c-ares resolver doesn't reach the sandbox's DNS relay;
-    # use getaddrinfo like kagent's Go runtime (spec 025).
-    - name: GRPC_DNS_RESOLVER
-      value: native
-    - name: GRPC_VERBOSITY
-      value: INFO
-    - name: GRPC_TRACE
-      value: client_channel,subchannel,http_proxy_mapper
     - name: RESEARCH_AGENT_PROVIDER
       value: bedrock
     - name: AWS_REGION
       value: us-west-2
+    # Claude Opus 4.6 until Bedrock serves Opus 5.5 to this account (research-agent
+    # D-035); Opus 4.8 isn't available either, so no client-side refusal fallback.
+    - name: RESEARCH_AGENT_MODEL
+      value: us.anthropic.claude-opus-4-6-v1
+    - name: RESEARCH_AGENT_BEDROCK_FALLBACK
+      value: none
     - name: AWS_BEARER_TOKEN_BEDROCK
       value: kagent-credential-injected
     - name: RESEARCH_AGENT_TOOLS_URL
       value: http://research-tools.agents.svc.cluster.local:8080
-    # Must match a key research-tools holds (kv/projects/research-agent/search).
+    # Must match keys research-tools holds (kv/projects/research-agent/search).
     - name: RESEARCH_AGENT_SEARCH_PROVIDER
+      value: exa
+    - name: RESEARCH_AGENT_SEARCH_FALLBACK
       value: brave
     # "on" only when ADS_API_TOKEN is in that secret.
     - name: RESEARCH_AGENT_ADS_REMOTE
-      value: "off"
+      value: "on"
   substrate:
     workerPoolRef:
       name: kagent-default
