@@ -78,3 +78,25 @@ port-forward.
 
 **Revisit when:** a second cluster or environment is added (the platform layer would move
 to its own repo), or kagent supports IAM roles for actors.
+
+## HD-004: Observability with self-hosted Phoenix; the whole hub rebuilds from code (2026-11-16) · Status: accepted
+
+**Context:** Traces exist (research-agent JSONL, kagent and Agent Substrate OpenTelemetry)
+but go nowhere. A second agent is planned: a secret tool (create / search) on OpenBao.
+Your decisions, 2026-11-16: full content in traces; all sources (research-agent, research-
+tools, kagent, Agent Substrate, and future agents); Arize Phoenix deployed in the EKS
+cluster; and everything must tear down and spin back up like the OpenBao platform.
+
+**Decision:**
+- Phoenix (self-hosted) in the cluster, behind an OpenTelemetry Collector that every source
+  sends to over OTLP. Agents emit OpenInference spans (agent, LLM, tool, guardrail).
+- Full content capture: prompts, queries, fetched page text and answers are exported to
+  Phoenix, which stays inside the VPC behind Cognito sign-in, with a retention period.
+- `scripts/stack.sh up` rebuilds the hub with no manual step beyond those it already prints;
+  `down` (and `up --restore`) keep what must survive. Each new piece states its lifecycle.
+
+**Consequences:** Phoenix holds user content: access is limited to signed-in admins and
+retention is bounded. The Secret MCP agent's traces must never carry secret values (D-19
+already forbids values in its tools). research-agent's spec 027 is rewritten around this.
+
+**Revisit when:** a hosted backend (Arize AX) is wanted: only the Collector's exporter changes.

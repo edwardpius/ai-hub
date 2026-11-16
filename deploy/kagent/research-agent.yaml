@@ -15,7 +15,7 @@ metadata:
 spec:
   byo: {}
   workload:
-    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:0a4132a7c21f1f3a1ddae9f29b005dcc93dbdbb9e1cb0fd4a83c03acd6bd59ae
+    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:2ea1fec28efb7c3371ce642e1a409078cee56ff99938df99095b84ad0ba59d7f
     command: ["/app/.venv/bin/research-agent-a2a"]
   env:
     - name: RESEARCH_AGENT_PROVIDER
@@ -40,6 +40,11 @@ spec:
     # "on" only when ADS_API_TOKEN is in that secret.
     - name: RESEARCH_AGENT_ADS_REMOTE
       value: "on"
+    # Traces with full content to the Collector, then Phoenix (HD-004, D-036).
+    - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
+    - name: RESEARCH_AGENT_TRACE_CONTENT
+      value: "on"
   substrate:
     workerPoolRef:
       name: kagent-default
@@ -63,6 +68,15 @@ spec:
         secretKeyRef:
           name: kagent-bedrock
           key: AWS_BEARER_TOKEN_BEDROCK
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: EgressPolicy
+metadata:
+  name: otel-collector
+  namespace: kagent
+spec:
+  destinations:
+    - origin: http://otel-collector.observability.svc.cluster.local:4318
 ---
 apiVersion: api.kagent.dev/v1alpha3
 kind: AgentTemplate
@@ -101,3 +115,4 @@ spec:
   egressPolicyRefs:
     - name: research-tools
     - name: bedrock
+    - name: otel-collector
