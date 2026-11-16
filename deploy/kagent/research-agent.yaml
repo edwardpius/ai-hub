@@ -18,6 +18,14 @@ spec:
     image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:d73cdc6dee814b2c6799872b306bbaebee073526a4443a9c046c4dd478dd0d67
     command: ["/app/.venv/bin/research-agent-a2a"]
   env:
+    # Python gRPC's default c-ares resolver doesn't reach the sandbox's DNS relay;
+    # use getaddrinfo like kagent's Go runtime (spec 025).
+    - name: GRPC_DNS_RESOLVER
+      value: native
+    - name: GRPC_VERBOSITY
+      value: INFO
+    - name: GRPC_TRACE
+      value: client_channel,subchannel,http_proxy_mapper
     - name: RESEARCH_AGENT_PROVIDER
       value: bedrock
     - name: AWS_REGION
