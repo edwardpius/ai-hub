@@ -1,0 +1,22 @@
+# In trusted-proxy mode the controller reads the bearer JWT without verifying its
+# signature (oauth2-proxy verifies it; kagent docs, openbao-platform D-19). So only
+# the proxy path and the platform may reach it: the UI, tools and workers in kagent,
+# and Agent Substrate (egress gateway, API) in ate-system. Pods in agents/genai or
+# elsewhere can't present a forged token to it directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kagent-controller
+  namespace: kagent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [kagent, ate-system]
