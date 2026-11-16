@@ -95,7 +95,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: research-tools
-          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:IMAGE_DIGEST
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:bca93330ccd778b01fc2f9fa066686c0aa624a0fe736fcb4fdb76b0228f868e1
           command: ["/app/.venv/bin/research-tools"]
           env:
             - name: RESEARCH_TOOLS_HOST
