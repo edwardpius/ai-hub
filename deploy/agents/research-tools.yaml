@@ -103,7 +103,7 @@ spec:
             - name: RESEARCH_TOOLS_PORT
               value: "8080"
             - name: RESEARCH_AGENT_SEARCH_PROVIDER
-              value: exa
+              value: brave
             - name: RESEARCH_AGENT_TRACE_DIR
               value: /data/traces
             - name: RESEARCH_AGENT_FETCH_CACHE_DIR

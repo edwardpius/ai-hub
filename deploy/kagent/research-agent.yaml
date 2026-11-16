@@ -26,10 +26,12 @@ spec:
       value: kagent-credential-injected
     - name: RESEARCH_AGENT_TOOLS_URL
       value: http://research-tools.agents.svc.cluster.local:8080
+    # Must match a key research-tools holds (kv/projects/research-agent/search).
     - name: RESEARCH_AGENT_SEARCH_PROVIDER
-      value: exa
+      value: brave
+    # "on" only when ADS_API_TOKEN is in that secret.
     - name: RESEARCH_AGENT_ADS_REMOTE
-      value: "on"
+      value: "off"
   substrate:
     workerPoolRef:
       name: kagent-default
