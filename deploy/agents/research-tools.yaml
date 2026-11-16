@@ -1,0 +1,212 @@
+# research-tools: the research-agent's search, paper-API and page fetching, plus the
+# research tools over MCP (streamable HTTP) for MCP Inspector (research-agent spec 024,
+# D-034). Holds the search API keys; the agent's sandbox holds none.
+#
+# Cluster-internal only: ClusterIP, no Ingress (hub principle 5). Test with:
+#   kubectl -n agents port-forward svc/research-tools 8080:8080
+#   npx @modelcontextprotocol/inspector  ->  Streamable HTTP, http://localhost:8080/mcp
+# IMAGE: set by scripts/release.sh (same image as the agent).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-agents
+  namespace: agents
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: openbao-agents
+  namespace: agents
+spec:
+  provider:
+    openBao:
+      server: https://openbao-active.openbao.svc:8200
+      path: kv
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          path: kubernetes
+          role: eso-agents
+          serviceAccountRef:
+            name: eso-agents
+---
+# Search keys at kv/projects/research-agent/search, any of: EXA_API_KEY,
+# BRAVE_API_KEY, ADS_API_TOKEN, S2_API_KEY. A missing key turns that tool off.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: research-agent-keys
+  namespace: agents
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: openbao-agents
+  target:
+    name: research-agent-keys
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: projects/research-agent/search
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: research-tools
+  namespace: agents
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-tools
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: research-tools
+    app.kubernetes.io/part-of: research-agent
+spec:
+  # One replica: MCP sessions live in process memory (spec 024).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-tools
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-tools
+        app.kubernetes.io/part-of: research-agent
+    spec:
+      serviceAccountName: research-tools
+      automountServiceAccountToken: false
+      nodeSelector:
+        workload-class: workloads
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: research-tools
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:IMAGE_DIGEST
+          command: ["/app/.venv/bin/research-tools"]
+          env:
+            - name: RESEARCH_TOOLS_HOST
+              value: 0.0.0.0
+            - name: RESEARCH_TOOLS_PORT
+              value: "8080"
+            - name: RESEARCH_AGENT_SEARCH_PROVIDER
+              value: exa
+            - name: RESEARCH_AGENT_TRACE_DIR
+              value: /data/traces
+            - name: RESEARCH_AGENT_FETCH_CACHE_DIR
+              value: /data/fetch-cache
+          envFrom:
+            - secretRef:
+                name: research-agent-keys
+                optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-tools
+  namespace: agents
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: research-tools
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Who may call it: agent traffic arrives from the Agent Substrate egress gateway
+# (ate-system) and kagent; port-forward from an admin's laptop goes through the API
+# server and isn't affected. Where it may go: public internet only. Its own Fetcher
+# already refuses private addresses after DNS; this is the second layer.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: research-tools
+  namespace: agents
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: research-tools
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [ate-system, kagent]
+      ports:
+        - port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+      ports:
+        - port: 443
+        - port: 80

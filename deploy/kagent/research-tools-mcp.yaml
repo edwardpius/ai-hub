@@ -1,0 +1,16 @@
+# The research tools as a RemoteMCPServer, so future kagent agents can bind them
+# (research-agent spec 024). research-agent itself doesn't use this binding: it calls
+# the same service through RemoteFetcher / RemoteSearchProvider (D-034).
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata:
+  name: research-tools
+  namespace: kagent
+spec:
+  description: >-
+    Guarded research tools: web, PubMed, arXiv, ADS and Semantic Scholar search, and
+    fetch_url limited to URLs a search in the same session returned.
+  url: http://research-tools.agents.svc.cluster.local:8080/mcp
+  protocol: STREAMABLE_HTTP
+  allowedNamespaces:
+    from: Same
