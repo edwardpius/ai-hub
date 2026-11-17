@@ -100,3 +100,17 @@ retention is bounded. The Secret MCP agent's traces must never carry secret valu
 already forbids values in its tools). research-agent's spec 027 is rewritten around this.
 
 **Revisit when:** a hosted backend (Arize AX) is wanted: only the Collector's exporter changes.
+
+## HD-005: Public HTTPS endpoints for the hub's UIs (2026-11-17) · Status: accepted
+
+**Context:** Every UI (kagent, Phoenix, OpenBao) was reached by `kubectl port-forward`.
+
+**Decision:** `https://kagent.edwardpius.me`, `https://arize.edwardpius.me` and
+`https://openbao.edwardpius.me` on one shared ALB built from a Gateway API Gateway (AWS Load
+Balancer Controller), DNS by ExternalDNS, TLS with an ACM wildcard. The ALB admits only
+the operator's addresses; each app keeps its own sign-in. The port-forwards stay as a
+fallback. Details: openbao-platform D-24.
+
+**Consequences:** a new agent with a UI gets a hostname by installing the `hub-route` chart
+in its namespace (and adding that namespace to the Gateway's allowed list). About
+$25/month more while the hub runs.
