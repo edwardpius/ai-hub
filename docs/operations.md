@@ -112,9 +112,10 @@ Levers:
 
 ## Known gaps and next steps
 
-- **Rebuild hands-free?** The 2026-11-16 down/up test found and fixed seven problems (see
-  openbao-platform DECISIONS.md D-23 findings); a full uninterrupted cycle with all fixes
-  in place is still to be confirmed.
+- **Hands-free?** `down` ran unattended on 2026-11-17 (its finalizer retry fired as
+  designed). The last `up` needed a re-run after an expired SSO session and one fix
+  (found by the 2026-11-16 test, see openbao-platform DECISIONS.md D-23 findings); the next
+  start confirms `up` unattended.
 - Claude Opus 5.5 on Bedrock: still refused for this account; revisit.
 - research-agent specs 026 (S3 report files + download service) and the golden-set evals
   on the hub (to tick the Phase 4 roadmap boxes).
