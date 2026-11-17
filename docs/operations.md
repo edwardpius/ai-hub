@@ -33,7 +33,7 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | What | URL | Sign-in |
 |---|---|---|
 | kagent UI (agents) | https://kagent.edwardpius.me | Identity Center |
-| Sign out of kagent | the **Sign out** button (bottom right, shows who is signed in), or https://kagent.edwardpius.me/logout. Ends the kagent, Cognito and Identity Center sessions, so another user can sign in next (openbao-platform D-26) | |
+| Sign out of kagent | the **Sign out** button (bottom right, shows who is signed in), or https://kagent.edwardpius.me/logout. Ends the kagent and Cognito sessions only: Identity Center keeps you signed in. **To switch user**, click **Switch user** (opens the access portal), sign out there (user menu, top right), then Sign out in kagent (openbao-platform D-26) | |
 | Phoenix (traces) | https://arize.edwardpius.me | Identity Center admins only. Projects: `research-agent`, `research-tools`, `platform` (kagent, Agent Substrate) |
 | OpenBao UI | https://openbao.edwardpius.me/ui | Identity Center (OIDC) |
 | OpenBao CLI | `export BAO_ADDR=https://openbao.edwardpius.me` | `bao login -method=oidc` or `-method=aws` |
