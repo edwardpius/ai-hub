@@ -33,7 +33,7 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | What | URL | Sign-in |
 |---|---|---|
 | kagent UI (agents) | https://kagent.edwardpius.me | Identity Center |
-| Sign out / switch user in kagent | Bottom right: **Sign out** ends the kagent and Cognito sessions (Identity Center keeps you signed in, so Sign in returns as the same user). **Switch user** signs out and opens the AWS access portal: there, Sign out (user menu, top right), sign in as the other user, and open the **AI Hub (kagent)** tile (openbao-platform D-26) | |
+| Sign out / switch user in kagent | Bottom right: **Sign out** ends the kagent and Cognito sessions (Identity Center keeps you signed in, so Sign in returns as the same user). **Switch user** opens the AWS access portal in a new tab and signs kagent out: in the portal, Sign out (user menu, top right) and close the tab; then Sign in in kagent as the other user. The portal's **AI Hub (kagent)** tile (Applications tab) also opens kagent (openbao-platform D-26) | |
 | Phoenix (traces) | https://arize.edwardpius.me | Identity Center admins only. Projects: `research-agent`, `research-tools`, `platform` (kagent, Agent Substrate) |
 | OpenBao UI | https://openbao.edwardpius.me/ui | Identity Center (OIDC) |
 | OpenBao CLI | `export BAO_ADDR=https://openbao.edwardpius.me` | `bao login -method=oidc` or `-method=aws` |
