@@ -9,6 +9,7 @@ on and the rules every agent must meet to join.
 
 | Start here | |
 |---|---|
+| [docs/operations.md](docs/operations.md) | **Start, use and stop the hub; what it costs** |
 | [docs/assessment.md](docs/assessment.md) | Why research-agent is deployed directly, not wrapped, and how |
 | [product/mission.md](product/mission.md) | Why the hub exists and what it will never do |
 | [product/roadmap.md](product/roadmap.md) | Phases and progress (the only place status lives) |
