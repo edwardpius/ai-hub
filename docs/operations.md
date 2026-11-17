@@ -95,10 +95,16 @@ identities (it asks you to type the cluster name).
 | Agent images, TLS certificate `*.edwardpius.me` | ECR `research-agent`, ACM (persistent) | layer 05 |
 | OpenBao policies, ESO role for agents, Bedrock key in OpenBao | | layer 50 |
 | research-agent (kagent bring-your-own agent), research-tools service | `kagent`, `agents` | this repo, `deploy/` (Argo CD) |
+| secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
 
 Model: Claude Opus 4.6 on Bedrock (`us.anthropic.claude-opus-4-6-v1`) until Bedrock serves
 Opus 5.5 to the account (research-agent D-035). To switch: the Harness env
 `RESEARCH_AGENT_MODEL` here, and `bedrock_model` in layer 45.
+
+## Release a new agent image
+
+`scripts/release-secrets-agent.sh ../secrets-agent` works the same way as the research-agent
+one below (pins `deploy/agents/secrets-mcp.yaml`).
 
 ## Release a new research-agent image
 
