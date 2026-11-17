@@ -26,3 +26,12 @@ f="$HUB/deploy/agents/secrets-mcp.yaml"
 sed -E -i.bak "s#(/secrets-agent@)sha256:[A-Za-z0-9_]+#\1$DIGEST#" "$f" && rm -f "$f.bak"
 echo "pushed $REPO:$TAG"
 echo "pinned $DIGEST in deploy/agents/secrets-mcp.yaml"
+
+# The secrets-sync reconciler (spec 004) runs the same image from openbao-platform layer 60
+# (local, gitignored tfvars). Pin it there too; it takes effect on the next layer 60 apply
+# (stack.sh up applies it).
+TFVARS="${OPENBAO_PLATFORM:-$HOME/openbao}/infra/60-sync/terraform.tfvars"
+if [ -f "$TFVARS" ] && grep -q '^apps_sync_image' "$TFVARS"; then
+  sed -E -i.bak "s#(apps_sync_image = \"[^\"]*/secrets-agent@)sha256:[A-Za-z0-9_]+#\1$DIGEST#" "$TFVARS" && rm -f "$TFVARS.bak"
+  echo "pinned $DIGEST in $TFVARS (apply layer 60 to roll the reconciler)"
+fi
