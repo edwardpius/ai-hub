@@ -76,7 +76,8 @@ About 30 minutes. It takes a final OpenBao snapshot, removes the public endpoint
 ALB and its DNS records), drains the agents, and destroys
 everything except the persistent layers: the Terraform state bucket, the KMS key and
 OpenBao snapshots, the agent images (ECR), the TLS certificate, Identity Center and
-Cognito. **Not kept:**
+Cognito, and the AWS Secrets Manager copies of `apps/` secrets (resynced after `up`).
+**Not kept:**
 kagent conversations and Phoenix traces (disposable POC, HD-004). Cost while down: about
 $2.50/month.
 
@@ -96,6 +97,7 @@ identities (it asks you to type the cluster name).
 | OpenBao policies, ESO role for agents, Bedrock key in OpenBao | | layer 50 |
 | research-agent (kagent bring-your-own agent), research-tools service | `kagent`, `agents` | this repo, `deploy/` (Argo CD) |
 | secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
+| secrets-sync reconciler + ESO stores: `apps/` secrets with AWS sync on -> Secrets Manager `openbao/...` | `secrets-sync` | openbao-platform layer 60 `apps_sync.tf` (D-27); image pinned in its local `terraform.tfvars` |
 
 Model: Claude Opus 4.6 on Bedrock (`us.anthropic.claude-opus-4-6-v1`) until Bedrock serves
 Opus 5.5 to the account (research-agent D-035). To switch: the Harness env
@@ -104,7 +106,10 @@ Opus 5.5 to the account (research-agent D-035). To switch: the Harness env
 ## Release a new agent image
 
 `scripts/release-secrets-agent.sh ../secrets-agent` works the same way as the research-agent
-one below (pins `deploy/agents/secrets-mcp.yaml`).
+one below (pins `deploy/agents/secrets-mcp.yaml`). It also pins the secrets-sync reconciler
+in `~/openbao/infra/60-sync/terraform.tfvars`; roll that with
+`terraform -chdir=$HOME/openbao/infra/60-sync apply -var-file=../common.tfvars` (or the next
+`stack.sh up`).
 
 ## Release a new research-agent image
 
@@ -129,6 +134,7 @@ Running 24/7:
 | EBS (node disks, OpenBao, Phoenix) | ~90 GB gp3 | 7.20 |
 | CloudWatch logs (EKS audit, API) | estimate | ~5 |
 | S3, ECR, KMS, Secrets Manager, Cognito, Lambda | small | ~3 |
+| Secrets Manager copies of `apps/` secrets (kept while down) | $0.40 per secret | ~1 per 2–3 secrets |
 | **Platform subtotal** | | **≈ $437** |
 | Public endpoints: ALB | 1, light traffic (LCU ~$1) | ~17.40 |
 | Public endpoints: ALB's public IPv4 addresses | 2 (one per AZ) | 7.30 |
