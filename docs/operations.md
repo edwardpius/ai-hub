@@ -38,6 +38,10 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | Argo CD | printed by `stack.sh up` | Identity Center sign-in |
 | MCP Inspector on the research tools | `kubectl -n agents port-forward svc/research-tools 8080:8080` | Streamable HTTP, http://localhost:8080/mcp |
 
+**Unauthorized from kubectl?** Your kubeconfig uses the `agentgrid` profile: sign in again
+(`aws sso login --profile agentgrid`). Every identity that may run `stack.sh` or kubectl
+must be in `cluster_admin_principals` (`~/openbao/infra/30-eks/terraform.tfvars`).
+
 Only one process can hold a local port: stop an old port-forward before starting a new one
 (`lsof -nP -iTCP:4180 -sTCP:LISTEN` shows who has it).
 
