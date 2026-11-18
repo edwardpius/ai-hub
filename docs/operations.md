@@ -92,6 +92,9 @@ $2.50/month.
 `scripts/stack.sh down --all` removes everything, including secrets, images and
 identities (it asks you to type the cluster name).
 
+**Inspecting agents on Agent Substrate** (actors per chat session, templates, workers,
+suspend/resume, logs): [agent-substrate.md](agent-substrate.md).
+
 ## What runs where
 
 | Piece | Where | Defined in |
