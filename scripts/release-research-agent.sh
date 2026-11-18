@@ -23,7 +23,8 @@ DIGEST="$(aws ecr describe-images --region "$REGION" --repository-name research-
   --image-ids imageTag="$TAG" --query 'imageDetails[0].imageDigest' --output text)"
 [[ "$DIGEST" == sha256:* ]] || { echo "could not read the pushed digest" >&2; exit 1; }
 
-for f in "$HUB/deploy/kagent/research-agent.yaml" "$HUB/deploy/agents/research-tools.yaml"; do
+for f in "$HUB/deploy/kagent/research-agent.yaml" "$HUB/deploy/agents/research-tools.yaml" \
+         "$HUB/deploy/agents/research-reports.yaml"; do
   sed -E -i.bak "s#(/research-agent@)sha256:[A-Za-z0-9_]+#\1$DIGEST#" "$f" && rm -f "$f.bak"
 done
 echo "pushed $REPO:$TAG"

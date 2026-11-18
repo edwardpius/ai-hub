@@ -103,7 +103,8 @@ identities (it asks you to type the cluster name).
 | kagent and Phoenix routes | `kagent`, `observability` | layer 45 (`gateway.tf`) |
 | Agent images, TLS certificate `*.edwardpius.me` | ECR `research-agent`, ACM (persistent) | layer 05 |
 | OpenBao policies, ESO role for agents, Bedrock key in OpenBao | | layer 50 |
-| research-agent (kagent bring-your-own agent), research-tools service | `kagent`, `agents` | this repo, `deploy/` (Argo CD) |
+| research-agent (kagent bring-your-own agent), research-tools service, research-reports service | `kagent`, `agents` | this repo, `deploy/` (Argo CD) |
+| research-agent reports bucket (persistent), research-reports Pod Identity role, `/reports/` download route on the kagent host | S3; `agents`; `kagent` (sign-out nginx) | openbao-platform layers 05, 45 (research-agent spec 026) |
 | secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
 | secrets-sync reconciler + ESO stores: `apps/` secrets with AWS sync on -> Secrets Manager `openbao/...` | `secrets-sync` | openbao-platform layer 60 `apps_sync.tf` (D-27); image pinned in its local `terraform.tfvars` |
 
@@ -118,6 +119,19 @@ one below (pins `deploy/agents/secrets-mcp.yaml`). It also pins the secrets-sync
 in `~/openbao/infra/60-sync/terraform.tfvars`; roll that with
 `terraform -chdir=$HOME/openbao/infra/60-sync apply -var-file=../common.tfvars` (or the next
 `stack.sh up`).
+
+## research-agent's report key (once, ever)
+
+Reports are stored under an HMAC of each user's ID (research-agent spec 026). Before the
+first `up` with the reports service, put the key in OpenBao; `stack.sh up` reminds you if
+it's missing, and `up --restore` brings it back after a teardown:
+
+```bash
+bao kv put kv/projects/research-agent/reports USER_HASH_KEY="$(openssl rand -hex 32)"
+```
+
+Never replace it: a new key hides every earlier report from its owner (the files stay in
+S3, readable by admins).
 
 ## Release a new research-agent image
 
