@@ -40,6 +40,11 @@ spec:
     # "on" only when ADS_API_TOKEN is in that secret.
     - name: RESEARCH_AGENT_ADS_REMOTE
       value: "on"
+    # Reports and the run's JSONL trace go to the reports service after each run, and the
+    # reply links the report (research-agent spec 026; spec 027 REQ-02/06). The service
+    # also gives the keyed user hash for spans.
+    - name: RESEARCH_AGENT_REPORTS_URL
+      value: http://research-reports.agents.svc.cluster.local:8080
     # Traces with full content to the Collector, then Phoenix (HD-004, D-036).
     - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
       value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
@@ -101,6 +106,17 @@ spec:
   destinations:
     - origin: http://research-tools.agents.svc.cluster.local:8080
 ---
+# The reports service's write port, in namespace agents (spec 026). Its download port is
+# not granted: the agent never reads reports.
+apiVersion: api.kagent.dev/v1alpha3
+kind: EgressPolicy
+metadata:
+  name: research-reports
+  namespace: kagent
+spec:
+  destinations:
+    - origin: http://research-reports.agents.svc.cluster.local:8080
+---
 apiVersion: api.kagent.dev/v1alpha3
 kind: Agent
 metadata:
@@ -116,3 +132,4 @@ spec:
     - name: research-tools
     - name: bedrock
     - name: otel-collector
+    - name: research-reports

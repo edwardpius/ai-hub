@@ -1,0 +1,218 @@
+# research-reports: keeps research-agent's reports and run traces in S3 (research-agent
+# spec 026, spec 027 REQ-06). Same image as the agent, command research-reports.
+#
+#   :8080  write API, ClusterIP: only the agent, through the Substrate egress gateway
+#   :8090  downloads, reached only through kagent's oauth2-proxy at
+#          https://<kagent host>/reports/<run_id>/<name> (openbao-platform layer 45,
+#          signout.tf): a user signed in to kagent gets only their own reports.
+#
+# The agent holds no AWS credentials. This pod's ServiceAccount gets the S3 role through
+# EKS Pod Identity (openbao-platform layer 45, aws.tf: research_reports), with
+#   s3:PutObject on reports/* and traces/*, s3:GetObject on reports/*: no list, no delete.
+# User prefixes are an HMAC of the user ID; the key is at OpenBao
+# kv/projects/research-agent/reports (USER_HASH_KEY). It must never change: a new key
+# hides every earlier report from its owner (they stay in S3, readable by admins).
+# IMAGE: set by scripts/release-research-agent.sh (same image as the agent).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: research-reports-key
+  namespace: agents
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: openbao-agents          # research-tools.yaml; eso-agents may read projects/research-agent/*
+  target:
+    name: research-reports-key
+    creationPolicy: Owner
+  data:
+    - secretKey: USER_HASH_KEY
+      remoteRef:
+        key: projects/research-agent/reports
+        property: USER_HASH_KEY
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: research-reports
+  namespace: agents
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-reports
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: research-reports
+    app.kubernetes.io/part-of: research-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-reports
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-reports
+        app.kubernetes.io/part-of: research-agent
+    spec:
+      serviceAccountName: research-reports
+      automountServiceAccountToken: false
+      nodeSelector:
+        workload-class: workloads
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: research-reports
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:2ea1fec28efb7c3371ce642e1a409078cee56ff99938df99095b84ad0ba59d7f
+          command: ["/app/.venv/bin/research-reports", "--host", "0.0.0.0",
+                    "--write-port", "8080", "--download-port", "8090"]
+          env:
+            - name: AWS_REGION
+              value: us-west-2
+            # openbao-platform layer 05 (persistent: survives stack.sh down).
+            - name: RESEARCH_REPORTS_BUCKET
+              value: openbao-nonprod-research-reports-288417637285
+            - name: RESEARCH_REPORTS_USER_KEY_FILE
+              value: /run/secrets/research-reports-key/USER_HASH_KEY
+            # Download links in the agent's replies (spec 026 REQ-09).
+            - name: RESEARCH_REPORTS_PUBLIC_URL
+              value: https://kagent.edwardpius.me
+            # The user is the `sub` of the ID token oauth2-proxy forwards, as kagent's
+            # controller reads it (spec 026 REQ-07). If the cluster check shows the
+            # agent's x-user-id is the email instead, set X-Forwarded-Email.
+            - name: RESEARCH_REPORTS_USER_HEADER
+              value: bearer-sub
+          ports:
+            - name: write
+              containerPort: 8080
+            - name: download
+              containerPort: 8090
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: write
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: write
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: key
+              mountPath: /run/secrets/research-reports-key
+              readOnly: true
+      volumes:
+        - name: key
+          secret:
+            secretName: research-reports-key   # not optional: GUARD-04, no key no service
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+# Two Services, so the write port and the download port can't be reached by the same name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-reports
+  namespace: agents
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: research-reports
+  ports:
+    - name: write
+      port: 8080
+      targetPort: write
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-reports-download
+  namespace: agents
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: research-reports
+  ports:
+    - name: download
+      port: 8090
+      targetPort: download
+---
+# Writes only from the agent (via the Substrate egress gateway in ate-system); downloads
+# only from kagent's sign-out nginx, which sits behind oauth2-proxy (spec 026 GUARD-03).
+# Out: DNS, S3 over HTTPS, and the EKS Pod Identity agent for credentials.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: research-reports
+  namespace: agents
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: research-reports
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ate-system
+      ports:
+        - port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kagent-signout
+      ports:
+        - port: 8090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32     # EKS Pod Identity agent
+      ports:
+        - port: 80
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+      ports:
+        - port: 443
