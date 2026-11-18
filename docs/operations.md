@@ -39,7 +39,7 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | OpenBao CLI | `export BAO_ADDR=https://openbao.edwardpius.me` | `bao login -method=oidc` or `-method=aws` |
 | Argo CD | printed by `stack.sh up` | Identity Center |
 
-The public URLs answer **only from the allowed addresses** (172.56.104.244 and
+The public URLs answer **only from the allowed addresses** (172.56.105.199 and
 50.147.226.2; `public_access_cidrs` in `~/openbao/infra/40-platform/terraform.tfvars`).
 From anywhere else the browser times out. To add or change an address, edit that list and
 run `terraform -chdir=$HOME/openbao/infra/40-platform apply -var-file=../common.tfvars`
@@ -55,6 +55,14 @@ Fallback when the URLs aren't reachable (port-forwards through the Kubernetes AP
 kagent and Phoenix have no working port-forward fallback while the public endpoints are
 on: their sign-in now uses HTTPS-only (Secure) cookies and returns to the public host. If
 you're away from the allowed addresses, add your address to `public_access_cidrs` instead.
+
+**`i/o timeout` on the EKS API (in `up`, or from kubectl)?** Your public address changed
+(the home connection hands out a new 172.56.x address now and then; found 2026-11-18).
+Check it with `curl -s https://checkip.amazonaws.com`, put it in both
+`~/openbao/infra/30-eks/terraform.tfvars` (`endpoint_public_access_cidrs`) and
+`~/openbao/infra/40-platform/terraform.tfvars` (`public_access_cidrs`), apply layer 30
+(`terraform -chdir=$HOME/openbao/infra/30-eks apply -var-file=../common.tfvars`, ~1 min),
+then re-run `stack.sh up --restore --yes`.
 
 **Unauthorized from kubectl?** Your kubeconfig uses the `agentgrid` profile: sign in again
 (`aws sso login --profile agentgrid`). Every identity that may run `stack.sh` or kubectl
