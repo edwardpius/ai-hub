@@ -207,7 +207,8 @@ its allowlist. It posts a summary and the full report as a file in the thread.
   The reference is the one an error message in Slack shows. Mentions in channels that
   aren't allowed are logged as `ignored`. If nothing is logged, Slack didn't send the event,
   usually because the mention was typed as plain text.
-- **Slack or the bridge down:** the kagent UI is unaffected. Runs started from Slack show there
+- **Slack or the bridge down:** the kagent UI is unaffected (EVAL-07). Messages sent to the
+  bot while it's down are dropped by Slack, not answered later: ask again. Runs started from Slack show there
   under the same user (EVAL-02, verified 2026-11-19).
 - **Release:** `AWS_PROFILE=agentgrid scripts/release-slack-bridge.sh ../slack-bridge`.
   It runs the bridge's tests and pins `deploy/agents/slack-bridge.yaml`; commit and push.
@@ -217,8 +218,7 @@ its allowlist. It posts a summary and the full report as a file in the thread.
 - **oauth2-proxy logs the Slack sign-in callback URL with its one-time code.** The code is
   used within a second and is useless without the bridge's PKCE verifier, but it shouldn't
   be logged. The fix is to exclude the path from request logging (layer 45).
-- H-006 evals still open: EVAL-01 (golden set from Slack), EVAL-04 (unassigned user can't link),
-  EVAL-07 (bridge at 0, UI unaffected). Results so far are on the roadmap line.
+- H-006 evals still open: EVAL-01 (golden set from Slack), EVAL-04 (unassigned user can't link). Results so far are on the roadmap line.
 
 - **Hands-free?** `down` ran unattended on 2026-11-17 (its finalizer retry fired as
   designed). The last `up` needed a re-run after an expired SSO session and one fix
