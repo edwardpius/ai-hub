@@ -74,13 +74,60 @@ so this also keeps the roadmap rule of no new Ingress.
 
 ### 2. Create the Slack app (`XS`, done by the operator)
 
-- Create the app in the workspace with Socket Mode on. It has two tokens: an app-level token
-  (`xapp-…`, scope `connections:write`) and a bot token (`xoxb-…`).
-- Permissions: `app_mentions:read`, `chat:write`, `files:write`, `channels:history`,
-  `im:history`, `im:read`. No email permission is needed: account linking (step 3)
-  replaces matching users by email.
-- Store both tokens in OpenBao and get them into the pod the same way the other agents'
-  secrets are synced. No token goes into the image.
+The bot only receives mentions and DMs, so it needs no permission to read channel history.
+No email permission either: account linking (step 3) replaces matching users by email.
+
+1. Go to <https://api.slack.com/apps>, **Create New App**, **From a manifest**, pick the
+   test workspace, and paste:
+
+   ```yaml
+   display_information:
+     name: Research Agent
+     description: Ask the hub's research-agent for a cited report
+   features:
+     app_home:
+       home_tab_enabled: false
+       messages_tab_enabled: true
+       messages_tab_read_only_enabled: false
+     bot_user:
+       display_name: research-agent
+       always_online: true
+   oauth_config:
+     scopes:
+       bot: [app_mentions:read, chat:write, files:write, im:history]
+   settings:
+     event_subscriptions:
+       bot_events: [app_mention, message.im]
+     interactivity:
+       is_enabled: false
+     org_deploy_enabled: false
+     socket_mode_enabled: true
+     token_rotation_enabled: false
+   ```
+
+2. **Basic Information → App-Level Tokens → Generate Token and Scopes**: name it
+   `socket`, add the scope `connections:write`, generate. This is `SLACK_APP_TOKEN`
+   (`xapp-…`).
+3. **Install App → Install to Workspace**, allow. The **Bot User OAuth Token** is
+   `SLACK_BOT_TOKEN` (`xoxb-…`).
+4. Create or pick a channel for research questions, run `/invite @research-agent` in it,
+   and copy its channel ID (channel name → **About**, at the bottom; it starts with `C`).
+   That goes in `ALLOWED_CHANNELS` (deployment manifest, H-006 task 4).
+5. With the hub up, put the tokens in OpenBao without leaving them in shell history:
+
+   ```bash
+   read -rs SLACK_BOT_TOKEN && read -rs SLACK_APP_TOKEN     # paste each, press Enter
+   bao kv put kv/projects/slack-bridge/slack \
+     SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN" SLACK_APP_TOKEN="$SLACK_APP_TOKEN"
+   unset SLACK_BOT_TOKEN SLACK_APP_TOKEN
+   ```
+
+   Never paste the tokens into chat, a file in a repo, or a ticket. If one leaks, regenerate
+   it on the same page (app-level token) or **Reinstall** (bot token), then repeat step 5.
+
+In channels, every question, follow-ups included, needs an `@research-agent` mention: the bot
+gets mention events only, which keeps it from reading anything else. In a DM no mention is
+needed.
 
 ### 3. Link Slack users to hub users (`S`)
 

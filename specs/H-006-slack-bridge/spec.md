@@ -54,7 +54,8 @@ signed-in users where they already work.
   D-28), with `Authorization: Bearer <that user's Cognito ID token>`, refreshed at the start
   of each run (the ID token lives 15 minutes, longer than the 10-minute run cap).
 - **REQ-10** THE BRIDGE SHALL map one Slack thread to one A2A context: the first message
-  starts a new context, and later messages in that thread continue it.
+  starts a new context, and later messages in that thread continue it. In channels a
+  follow-up needs a mention too (the app gets mention events only; no channel history).
 - **REQ-11** WHILE a run is in progress THE BRIDGE SHALL update the "researching…" reply with
   research-agent's progress at most once every 5 seconds.
 - **REQ-12** IF the user already has a run in progress THEN THE BRIDGE SHALL reply that a
@@ -186,5 +187,6 @@ End to end in a test Slack workspace, with the hub up:
 4. Image (trixie, non-root, pip removed, Trivy clean of fixable findings),
    `scripts/release-slack-bridge.sh`, manifests in `deploy/agents/`, Argo CD app.
 5. research-agent: add Slack to the trifecta declaration (doc only).
-6. Slack app in a test workspace (operator); tokens into OpenBao.
+6. Slack app in a test workspace (operator); tokens into OpenBao. Steps and manifest:
+   `docs/slack-integration.md`, step 2.
 7. `stack.sh` and `docs/operations.md`; end-to-end evals; tick the roadmap box.
