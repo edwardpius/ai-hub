@@ -112,15 +112,22 @@ No email permission either: account linking (step 3) replaces matching users by 
    `SLACK_BOT_TOKEN` (`xoxb-…`).
 4. Create or pick a channel for research questions, run `/invite @research-agent` in it,
    and copy its channel ID (channel name → **About**, at the bottom; it starts with `C`).
-   That goes in `ALLOWED_CHANNELS` (deployment manifest, H-006 task 4).
-5. With the hub up, put the tokens in OpenBao without leaving them in shell history:
+   That goes in `ALLOWED_CHANNELS`, stored in OpenBao with the tokens (step 5), not in
+   the manifest: this repo is public. Several channels: comma-separated.
+5. With the hub up, put the tokens and the channel ID(s) in OpenBao without leaving the
+   tokens in shell history:
 
    ```bash
    read -rs SLACK_BOT_TOKEN && read -rs SLACK_APP_TOKEN     # paste each, press Enter
    bao kv put kv/projects/slack-bridge/slack \
-     SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN" SLACK_APP_TOKEN="$SLACK_APP_TOKEN"
+     SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN" SLACK_APP_TOKEN="$SLACK_APP_TOKEN" \
+     ALLOWED_CHANNELS=C0123456789
    unset SLACK_BOT_TOKEN SLACK_APP_TOKEN
    ```
+
+   ESO syncs it into the `slack-bridge` Secret within an hour; to pick it up at once:
+   `kubectl -n agents annotate externalsecret slack-bridge force-sync=$(date +%s) --overwrite`,
+   then `kubectl -n agents rollout restart deploy/slack-bridge`.
 
    Never paste the tokens into chat, a file in a repo, or a ticket. If one leaks, regenerate
    it on the same page (app-level token) or **Reinstall** (bot token), then repeat step 5.
@@ -181,7 +188,8 @@ needed.
 ### 6. Deploy and network it (`S`)
 
 - Image built like the other agents: trixie base, non-root user, pip removed, Trivy scan.
-  Add `scripts/release-slack-bridge.sh`, manifests in `deploy/`, and an Argo CD app.
+  Add `scripts/release-slack-bridge.sh`, and `deploy/agents/slack-bridge.yaml` (synced by the
+  existing `ai-hub-agents` Argo CD app).
 - A normal Deployment in `agents`, not a kagent actor, because it must stay connected.
 - Network:
   - outbound to `slack.com` and `wss-primary.slack.com` through the NAT, and to Cognito's

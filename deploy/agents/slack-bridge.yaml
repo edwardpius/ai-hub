@@ -1,0 +1,222 @@
+# slack-bridge: ask research-agent from Slack (HD-006, spec H-006).
+# A normal Deployment, not a kagent actor: it holds a Socket Mode connection open.
+#
+# In:  the linking callback only, from the kagent-signout nginx (kagent.<domain>/slack/oauth/callback).
+# Out: Slack and Cognito (443), research-agent through kagent's oauth2-proxy (4180) with the
+#      user's own ID token, OpenBao (users' refresh tokens, slack-links/), the Collector.
+#
+# Secrets come from OpenBao through ESO:
+#   kv/projects/slack-bridge/cognito  the bridge's Cognito client (written by layer 50)
+#   kv/projects/slack-bridge/slack    SLACK_BOT_TOKEN, SLACK_APP_TOKEN, ALLOWED_CHANNELS
+#                                     (operator; docs/slack-integration.md, step 2)
+# The channel IDs live in OpenBao, not here: this repo is public.
+# IMAGE: set by scripts/release-slack-bridge.sh.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: slack-bridge
+  namespace: agents
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: openbao-agents
+  target:
+    name: slack-bridge
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: projects/slack-bridge/cognito
+    - extract:
+        key: projects/slack-bridge/slack
+---
+# Logs in to OpenBao (role slack-bridge, openbao-platform D-28) with its own token; may only
+# read and write slack-links/. No Kubernetes RBAC.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slack-bridge
+  namespace: agents
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-bridge
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: slack-bridge
+    app.kubernetes.io/part-of: research-agent
+spec:
+  # One replica: pending sign-ins, thread contexts and the one-run-per-user check live in
+  # process memory (H-006). Recreate so two never share the Socket Mode app.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slack-bridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slack-bridge
+        app.kubernetes.io/part-of: research-agent
+    spec:
+      serviceAccountName: slack-bridge
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # Up to RUN_TIMEOUT_S for a run to finish is too long to wait; drain() gives 20 s.
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        workload-class: workloads
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: slack-bridge
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/slack-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: slack-bridge
+          env:
+            - name: PUBLIC_BASE_URL
+              value: https://kagent.edwardpius.me
+            - name: OPENBAO_ADDR
+              value: https://openbao-active.openbao.svc:8200
+            - name: OPENBAO_CACERT
+              value: /etc/openbao-ca/ca.crt
+            - name: RUN_TIMEOUT_S
+              value: "600"
+            - name: RUNS_PER_DAY
+              value: "20"
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: sa-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            - name: openbao-ca
+              mountPath: /etc/openbao-ca
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The token alone (no API CA or namespace): for OpenBao's Kubernetes login.
+        - name: sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+        - name: openbao-ca
+          configMap:
+            name: openbao-ca
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-bridge
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: slack-bridge
+spec:
+  selector:
+    app.kubernetes.io/name: slack-bridge
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: slack-bridge
+  namespace: agents
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: slack-bridge
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    # The callback, from the kagent-signout nginx only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kagent-signout
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # research-agent, via oauth2-proxy (never the controller directly).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: oauth2-proxy
+      ports:
+        - port: 4180
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openbao
+      ports:
+        - port: 8200
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 4318
+          protocol: TCP
+    # Slack (Web API and Socket Mode) and Cognito, through the NAT.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+      ports:
+        - port: 443
+          protocol: TCP

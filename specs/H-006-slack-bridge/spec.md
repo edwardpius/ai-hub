@@ -185,7 +185,10 @@ End to end in a test Slack workspace, with the hub up:
 3. `slack-bridge` repo: Bolt app, A2A client, OAuth callback, OpenBao client, unit tests.
    Done as local repo `slack-bridge`, commit `e07c0b3` (35 offline tests); not pushed.
 4. Image (trixie, non-root, pip removed, Trivy clean of fixable findings),
-   `scripts/release-slack-bridge.sh`, manifests in `deploy/agents/`, Argo CD app.
+   `scripts/release-slack-bridge.sh`, manifests in `deploy/agents/slack-bridge.yaml`.
+   Done: the existing Argo CD app `ai-hub-agents` syncs it (no new app). Channel IDs come
+   from OpenBao with the tokens (public repo). The image digest is a placeholder until the
+   first release; don't push `deploy/` before running the script.
 5. research-agent: add Slack to the trifecta declaration (doc only).
 6. Slack app in a test workspace (operator); tokens into OpenBao. Steps and manifest:
    `docs/slack-integration.md`, step 2.
