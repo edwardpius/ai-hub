@@ -189,7 +189,12 @@ End to end in a test Slack workspace, with the hub up:
    Done: the existing Argo CD app `ai-hub-agents` syncs it (no new app). Channel IDs come
    from OpenBao with the tokens (public repo). The image digest is a placeholder until the
    first release; don't push `deploy/` before running the script.
-5. research-agent: add Slack to the trifecta declaration (doc only).
+5. research-agent: add Slack to the trifecta declaration (doc only). Done:
+   research-agent `592b9a1`, `product/tech-stack.md` principle 10.
 6. Slack app in a test workspace (operator); tokens into OpenBao. Steps and manifest:
    `docs/slack-integration.md`, step 2.
 7. `stack.sh` and `docs/operations.md`; end-to-end evals; tick the roadmap box.
+   `stack.sh` checks (openbao-platform `972040e`) and `docs/operations.md` done. The
+   live run needed three fixes: private replies in a thread went unseen; oauth2-proxy
+   rejected `email_verified=false` for extra issuers (openbao-platform D-29); the bridge
+   didn't send `A2A-Version: 1.0`. Evals: see the roadmap line.

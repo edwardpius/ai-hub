@@ -75,4 +75,7 @@ in the thread, as the same user as in the kagent UI (HD-006).
   the UI still works.
 - A user not assigned in Identity Center can't link; an unsigned token is refused.
 
-- [ ] Slack bridge - Socket Mode bridge, account linking through its own Cognito client, A2A through oauth2-proxy `M` → H-006 (`specs/H-006-slack-bridge/spec.md`)
+- [ ] Slack bridge - Socket Mode bridge, account linking through its own Cognito client, A2A through oauth2-proxy `M` → H-006 (`specs/H-006-slack-bridge/spec.md`). Live
+  2026-11-19: link, DM run, run in the allowed channel, disconnect and link again all
+  worked; EVAL-05 and EVAL-06 (forged tokens refused, 403) passed. Open: EVAL-01, -02,
+  -03, -04, -07.

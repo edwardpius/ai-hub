@@ -38,6 +38,7 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | OpenBao UI | https://openbao.edwardpius.me/ui | Identity Center (OIDC) |
 | OpenBao CLI | `export BAO_ADDR=https://openbao.edwardpius.me` | `bao login -method=oidc` or `-method=aws` |
 | Argo CD | printed by `stack.sh up` | Identity Center |
+| research-agent from Slack | DM the **research-agent** app, or `@research-agent <question>` in an allowed channel (pick the mention from Slack's list) | Once, through a private sign-in link (Identity Center); lasts 7 days. See [Slack bridge](#slack-bridge) |
 
 The public URLs answer **only from the allowed addresses** (172.56.105.199 and
 50.147.226.2; `public_access_cidrs` in `~/openbao/infra/40-platform/terraform.tfvars`).
@@ -109,6 +110,7 @@ suspend/resume, logs): [agent-substrate.md](agent-substrate.md).
 | research-agent (kagent bring-your-own agent), research-tools service, research-reports service | `kagent`, `agents` | this repo, `deploy/` (Argo CD) |
 | research-agent reports bucket (persistent), research-reports Pod Identity role, `/reports/` download route on the kagent host | S3; `agents`; `kagent` (sign-out nginx) | openbao-platform layers 05, 45 (research-agent spec 026) |
 | secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
+| Slack bridge (Socket Mode, account linking, A2A through oauth2-proxy); users' refresh tokens in OpenBao `slack-links/` | `agents`; OpenBao | this repo, `deploy/agents/slack-bridge.yaml` (Argo CD); code in `../slack-bridge`; Cognito client, routes, mount and policy in openbao-platform layers 25, 45, 50 (D-28, D-29) |
 | secrets-sync reconciler + ESO stores: `apps/` secrets with AWS sync on -> Secrets Manager `openbao/...` | `secrets-sync` | openbao-platform layer 60 `apps_sync.tf` (D-27); image pinned in its local `terraform.tfvars` |
 
 Model: Claude Opus 4.6 on Bedrock (`us.anthropic.claude-opus-4-6-v1`) until Bedrock serves
@@ -177,7 +179,47 @@ Levers:
 - The workloads nodes are 55% of the bill: Spot (−60–70%, fine for a POC), or 2 × t3.large
   (−$120) once utilization is measured, or Graviton t4g (−20%, needs arm64 images).
 
+## Slack bridge
+
+Ask research-agent from Slack (HD-006, spec H-006, plan and setup in
+[slack-integration.md](slack-integration.md)). The bridge runs as the user who asks: each
+Slack user links their hub account once. It answers DMs, and mentions in the channels on
+its allowlist. It posts a summary and the full report as a file in the thread.
+
+- **Tokens and channels** live in OpenBao at `kv/projects/slack-bridge/slack`
+  (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `ALLOWED_CHANNELS`). They survive `down`, and
+  `up --restore` brings them back. `stack.sh up` reminds you if they're missing. To allow
+  another channel, invite the bot there, then:
+
+  ```bash
+  bao kv patch kv/projects/slack-bridge/slack ALLOWED_CHANNELS=C0AAA,C0BBB
+  kubectl -n agents annotate externalsecret slack-bridge force-sync=$(date +%s) --overwrite
+  kubectl -n agents rollout restart deploy/slack-bridge
+  ```
+
+- **Links:** a user's link lasts 7 days (the bridge client's refresh token), and they're
+  asked to sign in again after that. `disconnect` in a DM revokes and deletes a link.
+  Admins can list and delete links but can't read them:
+  `bao kv metadata delete slack-links/<team ID>/<user ID>`. Signing in works only from the
+  allowed addresses, like the kagent UI.
+- **Logs:** `kubectl -n agents logs deploy/slack-bridge`. There's one line per event: its
+  kind, outcome (`link_offered`, `completed`, `disconnect`, `error`, …) and a reference.
+  The reference is the one an error message in Slack shows. Mentions in channels that
+  aren't allowed are logged as `ignored`. If nothing is logged, Slack didn't send the event,
+  usually because the mention was typed as plain text.
+- **Slack or the bridge down:** the kagent UI is unaffected. Runs started from Slack should show
+  there under the same user (EVAL-02, not yet confirmed).
+- **Release:** `AWS_PROFILE=agentgrid scripts/release-slack-bridge.sh ../slack-bridge`.
+  It runs the bridge's tests and pins `deploy/agents/slack-bridge.yaml`; commit and push.
+
 ## Known gaps and next steps
+
+- **oauth2-proxy logs the Slack sign-in callback URL with its one-time code.** The code is
+  used within a second and is useless without the bridge's PKCE verifier, but it shouldn't
+  be logged. The fix is to exclude the path from request logging (layer 45).
+- H-006 evals still open: EVAL-01 (golden set from Slack), EVAL-02 (Slack runs under the
+  same user in the UI), EVAL-03 (thread follow-up), EVAL-04 (unassigned user can't link),
+  EVAL-07 (bridge at 0, UI unaffected). Results so far are on the roadmap line.
 
 - **Hands-free?** `down` ran unattended on 2026-11-17 (its finalizer retry fired as
   designed). The last `up` needed a re-run after an expired SSO session and one fix
