@@ -62,3 +62,17 @@ Ideas, not commitments. Each needs a spec first.
 - Cross-agent trifecta policy in agentgateway, needed when the second agent arrives
 - Per-user daily cost caps
 - A routing agent (for example TypeSafe/Jev) if users start picking the wrong agent
+
+## Phase 5: research-agent from Slack
+
+**Goal:** A signed-in user asks research-agent in a Slack channel or DM and gets the report
+in the thread, as the same user as in the kagent UI (HD-006).
+
+**Success criteria:**
+- Golden-set questions asked in Slack meet research-agent's bar, median under 3 minutes and
+  under $0.50.
+- A report asked for in Slack shows up for the same user in the UI; with the bridge stopped,
+  the UI still works.
+- A user not assigned in Identity Center can't link; an unsigned token is refused.
+
+- [ ] Slack bridge - Socket Mode bridge, account linking through its own Cognito client, A2A through oauth2-proxy `M` → H-006 (`specs/H-006-slack-bridge/spec.md`)

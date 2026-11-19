@@ -114,3 +114,43 @@ fallback. Details: openbao-platform D-24.
 **Consequences:** a new agent with a UI gets a hostname by installing the `hub-route` chart
 in its namespace (and adding that namespace to the Gateway's allowed list). About
 $25/month more while the hub runs.
+
+## HD-006: research-agent from Slack through a bridge with linked accounts (2026-11-19) · Status: accepted
+
+**Context:** You want to ask research-agent from a Slack channel instead of only the kagent
+UI. Findings from kagent v1.0.0's source (`docs/slack-integration.md`): kagent has no Slack
+integration (0.x had an unauthenticated example, `a2a-slack-template`, written for the
+removed `/api/a2a/` path); kagent can't let a service act for a user; and in
+`trusted-proxy` mode the controller reads the bearer JWT without checking its signature,
+taking the principal from `iss` and `sub` only, with oauth2-proxy and
+`controller-networkpolicy.yaml` as the guard. Your answers, 2026-11-19: the bridge gets its
+own Cognito client (3a), answers in channels and DMs with the full report, and the kagent UI
+stays a full way in if Slack is down.
+
+**Decision:**
+- A **Slack bridge** service (Python, `slack_bolt` in Socket Mode, `a2a-sdk` 1.x), a
+  Deployment in `agents`. Code in its own public repo, `github.com/edwardpius/slack-bridge`;
+  manifests in this repo's `deploy/`. Spec H-006.
+- **Account linking:** each Slack user signs in once through the bridge's own Cognito app
+  client (authorization code, PKCE, the same Identity Center federation). The bridge keeps
+  the user's refresh token in OpenBao and calls kagent with that user's own ID token, so the
+  user is the same principal as in the UI. The bridge never writes or alters a token.
+- The bridge reaches the controller **through oauth2-proxy**, which checks the token's
+  signature (`skip-jwt-bearer-tokens`, `extra-jwt-issuers` for the bridge's client), not by
+  being admitted in `controller-networkpolicy.yaml`.
+- No inbound route from Slack. The only new inbound path is the sign-in callback on the
+  kagent host, behind the ALB's address allowlist (HD-005).
+- research-agent gets no Slack tool: the bridge, not the agent, posts to Slack.
+
+**Consequences:** no kagent change; Slack and the UI share conversations and reports.
+openbao-platform gains a Cognito client, oauth2-proxy settings and a callback route
+(layer 45), and an OpenBao path for refresh tokens. A user removed from Identity Center keeps
+Slack access until their refresh token expires, so its lifetime is a security setting.
+Linking only works from an allowed address, because the callback sits behind the ALB
+allowlist. Slack becomes an outbound channel for report text: recorded in research-agent's
+trifecta declaration. Ruled out: one shared service identity (3b), a bridge-minted token,
+and the 0.x template's agent-side Slack MCP server.
+
+**Revisit when:** kagent supports delegated (on-behalf-of) calls from a verified service
+identity; the ALB allowlist is opened to all users' addresses; or a second agent should be
+reachable from Slack (the bridge would route by agent).
