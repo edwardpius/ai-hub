@@ -1,7 +1,10 @@
 # Asking research-agent from Slack
 
-Status: plan, not started (2026-11-19). Nothing here is implemented yet. Decision HD-006
-(`product/decisions.md`); spec H-006 (`specs/H-006-slack-bridge/spec.md`).
+Status: **live since 2026-11-19.** Built from this plan; see "As built" below for what changed
+on the way. Decision HD-006 (`product/decisions.md`); spec H-006
+(`specs/H-006-slack-bridge/spec.md`); day-to-day operation in
+[operations.md](operations.md#slack-bridge). Code: `../slack-bridge`; manifests:
+`deploy/agents/slack-bridge.yaml`; platform: openbao-platform D-28, D-29.
 
 **Goal:** a user asks research-agent a question in Slack, in a channel or a DM, and gets the
 report back in the same thread. The kagent UI stays a full second way in.
@@ -16,6 +19,32 @@ addresses (HD-005), and Slack's servers have no fixed set of addresses to add to
 so this also keeps the roadmap rule of no new Ingress.
 
 **Effort:** about `M` (≈ 1 week).
+
+## How it works
+
+Linking once, then a question. The bridge opens the only connection to Slack (Socket Mode),
+holds no standing access of its own to kagent, and calls research-agent with the asking
+user's own short-lived ID token. Source: `docs/diagrams/slack-bridge.d2`. The deployment view
+(where the bridge runs next to kagent and the agent) is research-agent's hub diagram,
+`research-agent/docs/diagrams/hub.svg`, arrows S1–S4.
+
+![Linking a Slack user once, then asking research-agent from Slack](diagrams/slack-bridge.svg)
+
+## As built (2026-11-19)
+
+The plan below held. The live test turned up these differences, all fixed the same day:
+
+| Found | Cause | Fix |
+|---|---|---|
+| The sign-in link never showed in a DM | Private (ephemeral) replies inside a thread show no reply count, so a link under the user's top-level message went unseen | Private replies are top-level unless the user wrote in a thread (slack-bridge `67fd043`) |
+| oauth2-proxy refused the bridge's token: `email ... isn't verified` | Cognito marks Identity Center users `email_verified=false`. oauth2-proxy's `insecure-oidc-allow-unverified-email` covers its own client, not tokens accepted through `extra-jwt-issuers` | The pre-token Lambda drops `email_verified` for Identity Center users (openbao-platform D-29, layer 25) |
+| kagent refused the call: `requested "0.3", served "1.0"` | The SDK's client factory sets `A2A-Version`; building the transport directly doesn't | The bridge sends `A2A-Version: 1.0`, and the test fake now requires it (slack-bridge `89133f5`) |
+| A channel message got no reply | Channel messages reach the bridge only when they mention it: the app can't read channel history. Typed text that isn't picked from Slack's list isn't a mention | Documented; mentions the bridge ignores are now logged (slack-bridge `c8653b6`) |
+
+Also confirmed live: forged and unsigned tokens get 403 at oauth2-proxy. Runs started from
+Slack show under the same user in the kagent UI. With the bridge stopped, the UI works, and
+Slack drops messages sent meanwhile (they aren't answered later). Evals still open:
+EVAL-01 (golden set from Slack) and EVAL-04 (an unassigned user can't link).
 
 ## Decisions
 

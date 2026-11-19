@@ -1,0 +1,40 @@
+# Asking research-agent from Slack (HD-006, spec H-006): linking once, then a question.
+# Render: d2 docs/diagrams/slack-bridge.d2 docs/diagrams/slack-bridge.svg (and .png)
+
+vars: {d2-config: {pad: 30}}
+
+shape: sequence_diagram
+
+user: "Hub user" {shape: person; style: {fill: "#e2e8f0"; stroke: "#334155"; font-size: 20}}
+slack: "Slack" {style: {fill: "#ccfbf1"; stroke: "#0f766e"; font-size: 20}}
+bridge: "slack-bridge\n(agents)" {style: {fill: "#dbeafe"; stroke: "#1d4ed8"; font-size: 20}}
+cognito: "Cognito +\nIdentity Center" {style: {fill: "#ffedd5"; stroke: "#c2410c"; font-size: 20}}
+bao: "OpenBao\nslack-links/" {style: {fill: "#dcfce7"; stroke: "#15803d"; font-size: 20}}
+proxy: "oauth2-proxy\n(kagent)" {style: {fill: "#dcfce7"; stroke: "#15803d"; font-size: 20}}
+agent: "kagent controller →\nresearch-agent" {style: {fill: "#dbeafe"; stroke: "#1d4ed8"; font-size: 20}}
+
+linking: "Link once (lasts 7 days)" {
+  user -> slack: "1 DM or @mention"
+  slack -> bridge: "2 event, over the bridge's own\noutbound Socket Mode connection"
+  bridge -> slack: "3 private sign-in link\n(one-time state, PKCE)"
+  user -> cognito: "4 sign in (Identity Center),\nin the browser"
+  cognito -> bridge: "5 redirect to kagent.<domain>/slack/oauth/callback\n(ALB → oauth2-proxy skips sign-in → nginx)"
+  bridge -> cognito: "6 code + PKCE verifier"
+  cognito -> bridge: "ID token + refresh token" {style.stroke-dash: 3}
+  bridge -> bao: "7 store refresh token at\n<team>/<user> (only the bridge can read it)"
+  bridge -> slack: "8 DM: linked as <email>"
+}
+
+ask: "Ask" {
+  user -> slack: "9 question (DM, or @mention in an allowed channel)"
+  slack -> bridge: "10 event"
+  bridge -> slack: "Researching… (thread)" {style.stroke-dash: 3}
+  bridge -> bao: "11 read refresh token"
+  bridge -> cognito: "12 refresh"
+  cognito -> bridge: "fresh ID token (15 min)" {style.stroke-dash: 3}
+  bridge -> proxy: "13 A2A SendStreamingMessage\nBearer <user's ID token>, A2A-Version: 1.0"
+  proxy -> agent: "14 signature + audience checked;\nsame Authorization header passed on"
+  agent -> proxy: "progress, then the report (SSE)" {style.stroke-dash: 3}
+  proxy -> bridge: "" {style.stroke-dash: 3}
+  bridge -> slack: "15 progress updates, then summary +\nreport.md in the thread"
+}
