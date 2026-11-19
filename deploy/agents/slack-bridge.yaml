@@ -77,7 +77,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: slack-bridge
-          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/slack-bridge@sha256:ffd7fee03a19366c70e5423f9b955347e504e4cbb6f840dde9a650b5b9ba9e8b
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/slack-bridge@sha256:b0fab5adf26a1f0f493435407c6e2391dcca6e7f13643b9a8b935221da27cdc6
           ports:
             - name: http
               containerPort: 8080
