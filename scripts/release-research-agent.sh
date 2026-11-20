@@ -18,6 +18,10 @@ TAG="$(git -C "$SRC" rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
 aws ecr get-login-password --region "$REGION" |
   docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com" >/dev/null
 
+# research-agent spec 028: fresh Retraction Watch data goes into the image (D-038). The
+# file is git-ignored; the build fails if it's missing.
+(cd "$SRC" && uv run --frozen research-agent retractions update --path data/retractions.csv)
+
 docker buildx build --platform linux/amd64 -t "$REPO:$TAG" --provenance=false --push "$SRC"
 DIGEST="$(aws ecr describe-images --region "$REGION" --repository-name research-agent \
   --image-ids imageTag="$TAG" --query 'imageDetails[0].imageDigest' --output text)"
