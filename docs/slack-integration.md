@@ -43,8 +43,8 @@ The plan below held. The live test turned up these differences, all fixed the sa
 
 Also confirmed live: forged and unsigned tokens get 403 at oauth2-proxy. Runs started from
 Slack show under the same user in the kagent UI. With the bridge stopped, the UI works, and
-Slack drops messages sent meanwhile (they aren't answered later). Evals still open:
-EVAL-01 (golden set from Slack) and EVAL-04 (an unassigned user can't link).
+Slack drops messages sent meanwhile (they aren't answered later). EVAL-01 passed 2026-11-20: research-agent's golden set (`specs/007-research-cli`, k=1) asked in a Slack DM, graded from the hub's traces and reports: **10 of 10** (bar 8), 0 invariant violations, median 67 s (max 108 s), median $0.30 a question (max $0.41), $2.86 + judge $0.15, Claude Opus 4.6 on Bedrock; support judge off (the hub keeps no page text). Eval still open:
+EVAL-04 (an unassigned user can't link).
 
 ## Decisions
 

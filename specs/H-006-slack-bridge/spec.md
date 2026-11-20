@@ -197,4 +197,6 @@ End to end in a test Slack workspace, with the hub up:
    `stack.sh` checks (openbao-platform `972040e`) and `docs/operations.md` done. The
    live run needed three fixes: private replies in a thread went unseen; oauth2-proxy
    rejected `email_verified=false` for extra issuers (openbao-platform D-29); the bridge
-   didn't send `A2A-Version: 1.0`. Evals: see the roadmap line.
+   didn't send `A2A-Version: 1.0`. Evals: see the roadmap line. EVAL-01 passed 2026-11-20: research-agent's golden set (`specs/007-research-cli`, k=1) asked in a Slack DM, graded from the hub's traces and reports: **10 of 10** (bar 8), 0 invariant violations, median 67 s (max 108 s), median $0.30 a question (max $0.41), $2.86 + judge $0.15, Claude Opus 4.6 on Bedrock; support judge off (the hub keeps no page text); the questions
+   were typed in Slack and the runner (`research-eval --hub`) waited for each run's trace
+   in the reports bucket instead of sending the question itself.
