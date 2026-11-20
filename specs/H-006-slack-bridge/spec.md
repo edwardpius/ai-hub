@@ -199,4 +199,4 @@ End to end in a test Slack workspace, with the hub up:
    rejected `email_verified=false` for extra issuers (openbao-platform D-29); the bridge
    didn't send `A2A-Version: 1.0`. Evals: see the roadmap line. EVAL-01 passed 2026-11-20: research-agent's golden set (`specs/007-research-cli`, k=1) asked in a Slack DM, graded from the hub's traces and reports: **10 of 10** (bar 8), 0 invariant violations, median 67 s (max 108 s), median $0.30 a question (max $0.41), $2.86 + judge $0.15, Claude Opus 4.6 on Bedrock; support judge off (the hub keeps no page text); the questions
    were typed in Slack and the runner (`research-eval --hub`) waited for each run's trace
-   in the reports bucket instead of sending the question itself.
+   in the reports bucket instead of sending the question itself. EVAL-04 passed 2026-11-20: a second Slack user, signed in as an Identity Center user in no assigned group, was refused by Identity Center; the bridge only offered the sign-in link (twice), no callback reached it, no run started, and `slack-links/` still held one link.
