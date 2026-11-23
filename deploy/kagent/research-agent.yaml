@@ -15,7 +15,7 @@ metadata:
 spec:
   byo: {}
   workload:
-    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:ed9e7f142ee0d2b669dff5d4ce224c37e8b5a4622c26117816fe94f8f4553294
+    image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:397e413461bff8a13399683da2f9808947133072a51686fb5565de2b4d38926c
     command: ["/app/.venv/bin/research-agent-a2a"]
   env:
     - name: RESEARCH_AGENT_PROVIDER
