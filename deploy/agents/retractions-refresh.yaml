@@ -1,0 +1,127 @@
+# retractions-refresh: the Retraction Watch data for research-agent's retraction check,
+# refreshed daily (research-agent spec 029, D-038 option b). Same image as the agent,
+# command `research-agent retractions publish`:
+#   download the CSV from Crossref's GitLab (public, CC0), check it loads, gzip it, put it
+#   to s3://<reports bucket>/data/retractions/retraction_watch.csv.gz.
+# research-reports serves it to the agent (GET /v1/retractions on :8080); the agent falls
+# back to the copy built into its image if this has never run or fails.
+#
+# This pod's ServiceAccount gets an S3 role through EKS Pod Identity (openbao-platform
+# layer 45, aws.tf: retractions_refresh): s3:PutObject on data/retractions/* only. No
+# secrets, no Kubernetes RBAC, no service-account token.
+# The cluster doesn't exist on days the stack is down, so `stack.sh up` also starts one run
+# (kubectl create job --from=cronjob/retractions-refresh).
+# IMAGE: set by scripts/release-research-agent.sh (same image as the agent).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: retractions-refresh
+  namespace: agents
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retractions-refresh
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: retractions-refresh
+    app.kubernetes.io/part-of: research-agent
+spec:
+  schedule: "30 6 * * *"          # 06:30 UTC daily (REQ-01)
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid       # REQ-02
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: retractions-refresh
+            app.kubernetes.io/part-of: research-agent
+        spec:
+          serviceAccountName: retractions-refresh
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          nodeSelector:
+            workload-class: workloads
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: publish
+              image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-agent@sha256:e91f0a38233a18ad96529ec6a211fd6e97122e214ff40c777d1a70b2e0c41693
+              command: ["/app/.venv/bin/research-agent", "retractions", "publish"]
+              env:
+                - name: AWS_REGION
+                  value: us-west-2
+                # openbao-platform layer 05 (persistent: survives stack.sh down).
+                - name: RESEARCH_REPORTS_BUCKET
+                  value: openbao-nonprod-research-reports-288417637285
+                - name: TMPDIR
+                  value: /tmp
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 512Mi
+---
+# Out: DNS, the Pod Identity agent, and public HTTPS (gitlab.com for the CSV, S3). In:
+# nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: retractions-refresh
+  namespace: agents
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: retractions-refresh
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32     # EKS Pod Identity agent
+      ports:
+        - port: 80
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
