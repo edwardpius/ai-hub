@@ -1,6 +1,6 @@
 # Remote stack control: start, stop and open the AI Hub from anywhere
 
-Status: **steps 1–2 of §11 built 2026-11-24** (openbao-platform D-30, D-31; workflows in openbao-platform); steps 3–5 not built yet.
+Status: **steps 1–3 of §11 built and tested 2026-11-24** (openbao-platform D-30, D-31, D-32; workflows in openbao-platform); steps 4–5 not built yet.
 
 Today `scripts/stack.sh up|down` only runs on the laptop, after `aws sso login --profile
 agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
@@ -159,8 +159,13 @@ Operations (same in Slack and Claude):
 | Operation | What happens |
 |---|---|
 | `ips` | Lists entries, their labels and expiry |
-| `allow-me [label] [for 3d \| permanent]` | Returns a **one-time link** (valid 10 min, single use). You open it on the device to allow; it signs you in (Cognito → Identity Center + MFA), takes your real source IP from the request, adds it as a /32 (default expiry 24 h; `permanent` for home), and, if the stack is up, dispatches `access.yml` |
+| `allow-me [label] [for 3d \| permanent]` | Returns a **one-time link** (valid 10 min, single use). You open it on the device to allow; (from step 4) it signs you in (Cognito → Identity Center + MFA); it takes your real source IP from the request, adds it as a /32 (default expiry 24 h; `permanent` for home), and, if the stack is up, dispatches `access.yml` |
 | `revoke <label>` | Removes an entry and dispatches `access.yml` |
+
+The link is served from an **IPv4-only** endpoint (an API Gateway HTTP API next to the
+Lambda). Lambda Function URLs are dual-stack, and on an IPv6 network such as T-Mobile's the
+first version saw an IPv6 address; the hub's endpoints are IPv4-only, so they see that
+device through the carrier's IPv4 gateway, which is the address the link must record.
 
 The link is needed because a Slack or Claude request reaches AWS from Slack's or
 Anthropic's servers: the Lambda would see their IP, not yours. Entries persist across
@@ -181,6 +186,10 @@ inbound rules. Both are far above what this needs.
 The research-agent Slack bridge can't be used: it dies with the stack. A second, tiny
 Slack app in the same workspace with a slash command `/hub` whose request URL is the
 Lambda's Function URL. It uses plain HTTPS, not Socket Mode, so nothing has to stay running.
+
+Type `/hub` in any conversation except the app's own DM, whose Messages tab is read-only (it
+only carries run updates and reminders); replies are visible only to you. Any Slack client
+works, including app.slack.com in a browser.
 
 Lambda checks, in order: Slack signature (signing secret from Secrets Manager), timestamp
 within 5 min (replay), the workspace's `team_id`, your **Slack user ID** on an allowlist.
@@ -402,11 +411,11 @@ Each step is usable on its own.
 2. **GitHub Actions:** `hub-deployer` (layer 02-control), `stack.yml` and `access.yml` in
    openbao-platform. From here you can start/stop from the GitHub mobile app.
 3. **Slack door:** `hub-control` Lambda, GitHub App, `hub-control` Slack app, allow-me
-   links, the up-too-long reminder.
+   links, the up-too-long reminder. *Built and tested 2026-11-24 (D-32).*
 4. **Claude door:** MCP endpoint on the same Lambda with Cognito OAuth; add as a claude.ai
    connector.
 5. AWS Budget alert.
 
 ## 12. Still open
 
-Nothing. Next: step 1 of the build order (§11).
+Nothing. Next: a remote `down` from Slack, then step 4 (§11).
