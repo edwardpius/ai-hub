@@ -113,6 +113,8 @@ browser or claude.ai opens goes through a small IPv4-only API Gateway in front o
 Lambda: the IPv4 address a device shows there is the one the hub will see (§5), and the
 Function URL would rename the `WWW-Authenticate` header that MCP clients need (§6). The
 runs report back through the Lambda, so the Slack token never reaches GitHub.
+The same picture is in IcePanel as **AI Hub: remote control** (and on the **AI Hub: context**
+diagram); this file stays the source of truth.
 
 ## 3. Runner: GitHub Actions in openbao-platform
 
