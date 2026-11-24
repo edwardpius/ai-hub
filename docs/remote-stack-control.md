@@ -1,6 +1,6 @@
 # Remote stack control: start, stop and open the AI Hub from anywhere
 
-Status: **steps 1–3 of §11 built and tested 2026-11-24** (openbao-platform D-30, D-31, D-32; workflows in openbao-platform); steps 4–5 not built yet.
+Status: **all five steps of §11 built 2026-11-24** (openbao-platform D-30 to D-34; workflows in openbao-platform). Steps 1–3 and 5 tested end to end; step 4 (Claude connector) deployed and smoke-tested, waiting for the first claude.ai sign-in.
 
 Today `scripts/stack.sh up|down` only runs on the laptop, after `aws sso login --profile
 agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
@@ -111,7 +111,7 @@ run `scripts/stack.sh` from the same checkout. ai-hub stays public and holds non
   `github.ref == 'refs/heads/main'`.
 - Cost awareness without automation: when a stack has been up more than **5 hours** (R-13),
   the Lambda posts **one reminder** in Slack ("up 5 h, ≈ $3 so far, `/hub down`?").
-  It never acts on its own. Plus an AWS Budget alert (e.g. $50/month) by e-mail. A
+  It never acts on its own. Plus an AWS Budget alert ($100/month, as a Slack DM; D-34). A
   forgotten stack costs ≈ $15/day ([operations.md, Cost](operations.md)).
 
 ## 4. AWS access with no stored credentials
@@ -159,7 +159,7 @@ Operations (same in Slack and Claude):
 | Operation | What happens |
 |---|---|
 | `ips` | Lists entries, their labels and expiry |
-| `allow-me [label] [for 3d \| permanent]` | Returns a **one-time link** (valid 10 min, single use). You open it on the device to allow; (from step 4) it signs you in (Cognito → Identity Center + MFA); it takes your real source IP from the request, adds it as a /32 (default expiry 24 h; `permanent` for home), and, if the stack is up, dispatches `access.yml` |
+| `allow-me [label] [for 3d \| permanent]` | Returns a **one-time link** (valid 10 min, single use). You open it on the device to allow; it signs you in (Cognito → Identity Center + MFA); it takes your real source IP from the request, adds it as a /32 (default expiry 24 h; `permanent` for home), and, if the stack is up, dispatches `access.yml` |
 | `revoke <label>` | Removes an entry and dispatches `access.yml` |
 
 The link is served from an **IPv4-only** endpoint (an API Gateway HTTP API next to the
@@ -210,6 +210,13 @@ did the last down fail?", "let me in from this hotel".
 
 - Sign-in: OAuth through the existing Cognito pool, federated to Identity Center (layer
   25, persistent). Only your user, with MFA, gets a token.
+- As built (D-33): the endpoint is `/mcp` on the IPv4 API Gateway next to the Lambda, not
+  the Function URL, which renames the `WWW-Authenticate` header MCP clients use to find
+  the sign-in. Cognito offers no dynamic client registration, so in claude.ai you pick
+  "Use your own OAuth client" and enter the public client ID (no secret). The Lambda
+  publishes the OAuth discovery documents and passes sign-in and token requests through to
+  Cognito for that one client and the claude.ai callback only. Tokens are accepted only for
+  your Cognito `sub`; claude.ai stays signed in for 7 days.
 - Tools: `hub_status`, `hub_up`, `hub_down` (needs `confirm: true`), `hub_ips`,
   `hub_allow_me_link`, `hub_revoke`, `hub_run_log(run_id)` (the last N lines of a run,
   known secret patterns redacted, so Claude can explain a failure).
@@ -412,10 +419,10 @@ Each step is usable on its own.
    openbao-platform. From here you can start/stop from the GitHub mobile app.
 3. **Slack door:** `hub-control` Lambda, GitHub App, `hub-control` Slack app, allow-me
    links, the up-too-long reminder. *Built and tested 2026-11-24 (D-32).*
-4. **Claude door:** MCP endpoint on the same Lambda with Cognito OAuth; add as a claude.ai
+4. **Claude door:** *built 2026-11-24 (D-33).* MCP endpoint on the same Lambda with Cognito OAuth; add as a claude.ai
    connector.
-5. AWS Budget alert.
+5. AWS Budget alert. *Built and tested 2026-11-24 (D-34): $100/month account-wide, alerts at 50/80/100 % and 100 % forecast as Slack DMs.*
 
 ## 12. Still open
 
-Nothing. Next: a remote `down` from Slack, then step 4 (§11).
+Nothing. Next: add the connector in claude.ai and test it; a remote `up` from Slack; copy the OpenBao items to Bitwarden (§7) while it is up.
