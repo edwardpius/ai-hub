@@ -1,6 +1,6 @@
 # Remote stack control: start, stop and open the AI Hub from anywhere
 
-Status: **all five steps of §11 built 2026-11-24** (openbao-platform D-30 to D-34; workflows in openbao-platform). Steps 1–3 and 5 tested end to end; step 4 (Claude connector) deployed and smoke-tested, waiting for the first claude.ai sign-in.
+Status: **all five steps of §11 built 2026-11-24** (openbao-platform D-30 to D-34; workflows in openbao-platform). All five tested end to end (the Claude connector signed in from claude.ai the same day).
 
 Today `scripts/stack.sh up|down` only runs on the laptop, after `aws sso login --profile
 agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
@@ -425,4 +425,4 @@ Each step is usable on its own.
 
 ## 12. Still open
 
-Nothing. Next: add the connector in claude.ai and test it; a remote `up` from Slack; copy the OpenBao items to Bitwarden (§7) while it is up.
+Nothing. Next: a remote `up` (Slack or Claude); copy the OpenBao items to Bitwarden (§7) while it is up.
