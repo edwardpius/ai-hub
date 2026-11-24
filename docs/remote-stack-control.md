@@ -1,6 +1,6 @@
 # Remote stack control: start, stop and open the AI Hub from anywhere
 
-Status: **step 1 of §11 done 2026-11-24** (openbao-platform D-30, branch `remote-control`); steps 2–5 not built yet.
+Status: **steps 1–2 of §11 built 2026-11-24** (openbao-platform D-30, D-31; workflows in openbao-platform); steps 3–5 not built yet.
 
 Today `scripts/stack.sh up|down` only runs on the laptop, after `aws sso login --profile
 agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
@@ -15,7 +15,7 @@ agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
 | # | Question | Decision |
 |---|---|---|
 | R-1 | Scope | Start/stop from anywhere **and** use the hub from anywhere |
-| R-2 | Runner | **GitHub Actions** in a new **private** repo `hub-ops`; openbao-platform stays public |
+| R-2 | Runner | **GitHub Actions** in **openbao-platform** itself, which turned out to be private (first planned in a separate private `hub-ops` repo, now archived) |
 | R-3 | Front doors | **Slack** command and a **Claude** connector, both through one control Lambda |
 | R-4 | Agent power | **Operator only**: start, stop, status, run logs, allowlist links. No arbitrary commands, no Terraform edits |
 | R-5 | Schedule | **None.** Up and down are always intentional; no scheduled up, no automatic down |
@@ -28,13 +28,12 @@ agentgrid`, and only from the two home IP addresses. This doc proposes a way to:
 | R-12 | OpenBao recovery keys | **None**: keep self-init (D-06/D-20); protect the KMS key and snapshots instead |
 | R-13 | Cost reminder | One Slack reminder after the stack has been up **5 hours** |
 
-On "openbao-platform is public because of Argo CD": the records don't say that. Argo CD
-reads only **ai-hub** (AppProject `agents`, source repos `https://github.com/edwardpius/*`,
-D-21/D-23). ai-hub being public is what lets Argo CD pull without repository
-credentials. openbao-platform is applied by Terraform from wherever `stack.sh` runs, never
-by Argo CD. For this design it doesn't matter: `hub-ops` checks out the public
-openbao-platform without credentials. If openbao-platform ever goes private, `hub-ops`
-needs a read-only deploy key for it. Argo CD is unaffected.
+On "openbao-platform is public because of Argo CD": it isn't public; it's **private**
+(found on the first remote run, 2026-11-24). Argo CD reads only **ai-hub** (AppProject
+`agents`, source repos `https://github.com/edwardpius/*`, D-21/D-23). ai-hub being public is
+what lets Argo CD pull without repository credentials. openbao-platform is applied by
+Terraform from wherever `stack.sh` runs, never by Argo CD. Because it's private, its own run
+logs are private, so the workflows live there and need no credential to read the code.
 
 ---
 
@@ -75,7 +74,7 @@ flowchart LR
     SSM[(SSM: tfvars,<br/>allowed CIDRs)]
     R[IAM role hub-deployer<br/>trusts GitHub OIDC]
   end
-  subgraph GitHub, private repo hub-ops
+  subgraph GitHub, private repo openbao-platform
     W[workflows: stack.yml, access.yml]
   end
   S -- signed request --> L
@@ -94,11 +93,11 @@ One control point (the Lambda) behind both front doors, so the rules (who may do
 written once. GitHub's own "Run workflow" button stays as a fallback that needs neither
 Slack nor Claude.
 
-## 3. Runner: GitHub Actions in the private `hub-ops` repo
+## 3. Runner: GitHub Actions in openbao-platform
 
-openbao-platform and ai-hub are **public**, and run logs of a public repo are public
-(Terraform plans, resource IDs, IPs). The workflows therefore live in the private
-`edwardpius/hub-ops`, which checks out openbao-platform at `main` and runs `stack.sh`.
+Run logs of a public repo are public (Terraform plans, resource IDs, IPs). openbao-platform
+is private, so the workflows live there (`.github/workflows/stack.yml`, `access.yml`) and
+run `scripts/stack.sh` from the same checkout. ai-hub stays public and holds none of this.
 
 - Minutes: 2,000/month on Free; one up+down cycle ≈ 80 min. Jobs may run up to 6 h.
 - Workflows (all `workflow_dispatch` only: **no `schedule:` triggers**, R-5):
@@ -107,8 +106,9 @@ openbao-platform and ai-hub are **public**, and run logs of a public repo are pu
     overlap.
   - `access.yml`: applies the allowlist to layers 30 and 40 (targeted) when it changes and
     the stack is up. About 2–5 minutes. Also part of `stack.yml up`.
-- Each job uses a GitHub **environment** `stack` whose deployment-branch rule allows only
-  `main`, so no other branch can get AWS credentials.
+- No GitHub environment: private repos on GitHub Free don't get environments. Instead the
+  role trusts only runs on `main` (below), and every job also checks
+  `github.ref == 'refs/heads/main'`.
 - Cost awareness without automation: when a stack has been up more than **5 hours** (R-13),
   the Lambda posts **one reminder** in Slack ("up 5 h, ≈ $3 so far, `/hub down`?").
   It never acts on its own. Plus an AWS Budget alert (e.g. $50/month) by e-mail. A
@@ -116,10 +116,11 @@ openbao-platform and ai-hub are **public**, and run logs of a public repo are pu
 
 ## 4. AWS access with no stored credentials
 
-- An IAM OIDC provider for `token.actions.githubusercontent.com` and a role
-  **`hub-deployer`**, created in a persistent layer (00-bootstrap, or a new `02-control`).
+- The role **`hub-deployer`**, in the persistent layer `02-control` (openbao-platform D-31),
+  applied only from the laptop. The account's GitHub OIDC provider already existed (the
+  AgentGrid project's Terraform owns it), so layer 02 references it and never manages it.
 - Trust policy: `aud = sts.amazonaws.com` and **exact**
-  `sub = repo:edwardpius/hub-ops:environment:stack` (no wildcards: a wildcard on `sub` is
+  `sub = repo:edwardpius/openbao-platform:ref:refs/heads/main` (no wildcards: a wildcard on `sub` is
   the classic way strangers' repos get your role).
 - Session length 2 h (enough for `up`; a stuck run loses access on its own).
 - Permissions: the layers create IAM roles, EKS, Identity Center groups and Cognito, so the
@@ -129,7 +130,8 @@ openbao-platform and ai-hub are **public**, and run logs of a public repo are pu
   - `kms:ScheduleKeyDeletion`, `kms:DisableKey`, `kms:PutKeyPolicy` on the OpenBao key
     (losing it loses every secret, see §7);
   - delete Identity Center instance/permission sets, `organizations:*`, `account:*`;
-  - `iam:CreateUser`, `iam:CreateAccessKey`, `iam:CreateLoginProfile` (no backdoor users);
+  - `iam:CreateUser` except layer 45's Bedrock key user, `iam:CreateAccessKey`,
+    `iam:CreateLoginProfile` (no backdoor users);
   - any region except us-west-2 (with the exemptions global services need);
   - changing `hub-deployer` itself or the OIDC provider.
 - Add `hub-deployer` to `cluster_admin_principals` (layer 30) so it can run kubectl.
@@ -212,9 +214,9 @@ did the last down fail?", "let me in from this hotel".
 - Actions are a fixed list; inputs are validated enums/labels, never passed to a shell.
 - **`down --all` is not reachable remotely**: not in the Lambda, not a workflow input.
 - Rate limit: at most N dispatches per hour; `concurrency` in GitHub blocks overlaps.
-- The GitHub App the Lambda uses has **only** `actions: write` + `contents: read` on
-  `hub-ops`. If its key leaks, the worst case is someone starting or stopping your stack,
-  not changing code.
+- The GitHub App the Lambda uses has **only** `actions: write` on openbao-platform (no
+  contents access). If its key leaks, the worst case is someone starting or stopping your
+  stack, not reading or changing code.
 - Audit trail: Lambda logs (who, what, from which IP) in CloudWatch; GitHub run history;
   CloudTrail for every AWS call `hub-deployer` makes. Each run posts its summary to Slack.
 
@@ -265,8 +267,8 @@ Folder **AI Hub**, all as **Secure notes** with **hidden** custom fields:
 | `AI Hub – Slack bridge` | OpenBao `kv/projects/slack-bridge/slack` | Re-issuable in the Slack app config; convenient |
 | `AWS root – 288417637285` (login item) | By hand | Root e-mail, password, MFA recovery |
 | `Identity Center – <your user> MFA backup` | By hand | Get back into the portal if you lose your phone |
-| `GitHub – recovery codes` | By hand | Owner of all three repos and the `hub-ops` GitHub App |
-| `hub-ops GitHub App private key` | When created (step 3 below) | Backup only; can be regenerated |
+| `GitHub – recovery codes` | By hand | Owner of the repos and the `hub-control` GitHub App |
+| `hub-control GitHub App private key` | When created (step 3 below) | Backup only; can be regenerated |
 
 Not needed: the Bedrock key (layer 45 creates it), OpenBao tokens (short-lived), anything
 in `apps/` (synced to Secrets Manager and in the snapshot).
@@ -322,8 +324,8 @@ delete the old one).
 
 | Threat | Stopped by |
 |---|---|
-| Someone else's GitHub repo assumes `hub-deployer` | Exact `sub` match incl. environment; environment restricted to `main` |
-| Leaked GitHub App key | Its only power is dispatching `hub-ops` workflows; rotate the key; Lambda rate limit |
+| Someone else's GitHub repo assumes `hub-deployer` | Exact `sub` match: openbao-platform, branch `main` only |
+| Leaked GitHub App key | Its only power is dispatching the stack workflows; rotate the key; Lambda rate limit |
 | Spoofed Slack request | Signature + timestamp + team ID + user ID checks |
 | Someone else in your Slack workspace runs `/hub` | User ID allowlist |
 | Claude connector used by someone else | OAuth via Identity Center + MFA, single-user check |
@@ -397,8 +399,8 @@ Each step is usable on its own.
 
 1. **Laptop prep:** push openbao-platform (R-11); §9.1 bootstrap state; §9.2 tfvars + the
    CIDR parameter; §9.3 `--ci` mode. Copy the OpenBao items to Bitwarden (§7) on the next `up`.
-2. **GitHub Actions:** OIDC provider + `hub-deployer` (persistent layer), private `hub-ops`,
-   `stack.yml`, `access.yml`. From here you can start/stop from the GitHub mobile app.
+2. **GitHub Actions:** `hub-deployer` (layer 02-control), `stack.yml` and `access.yml` in
+   openbao-platform. From here you can start/stop from the GitHub mobile app.
 3. **Slack door:** `hub-control` Lambda, GitHub App, `hub-control` Slack app, allow-me
    links, the up-too-long reminder.
 4. **Claude door:** MCP endpoint on the same Lambda with Cognito OAuth; add as a claude.ai
