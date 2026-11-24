@@ -40,11 +40,20 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | Argo CD | printed by `stack.sh up` | Identity Center |
 | research-agent from Slack | DM the **research-agent** app, or `@research-agent <question>` in an allowed channel (pick the mention from Slack's list) | Once, through a private sign-in link (Identity Center); lasts 7 days. See [Slack bridge](#slack-bridge) |
 
-The public URLs answer **only from the allowed addresses** (172.56.105.199 and
-50.147.226.2; `public_access_cidrs` in `~/openbao/infra/40-platform/terraform.tfvars`).
-From anywhere else the browser times out. To add or change an address, edit that list and
-run `terraform -chdir=$HOME/openbao/infra/40-platform apply -var-file=../common.tfvars`
-(about a minute). Check your current address with `curl -s https://checkip.amazonaws.com`.
+The public URLs and the EKS API answer **only from the allowed addresses**: one list in SSM
+(`/openbao-platform/access/cidrs`, openbao-platform D-30). From anywhere else the browser
+(and kubectl) times out. Manage it from `~/openbao`:
+
+```bash
+scripts/stack.sh ips                              # what's allowed, and until when
+scripts/stack.sh allow me hotel --hours 24        # this machine's address, for a day
+scripts/stack.sh allow 203.0.113.7/32 office      # a given address, permanent
+scripts/stack.sh revoke hotel
+```
+
+`allow`/`revoke` apply it at once when the stack is up (layers 30 and 40, a few minutes);
+when it's down, the next `up` uses it. Check your current address with
+`curl -s https://checkip.amazonaws.com`.
 
 Fallback when the URLs aren't reachable (port-forwards through the Kubernetes API):
 
@@ -58,12 +67,10 @@ on: their sign-in now uses HTTPS-only (Secure) cookies and returns to the public
 you're away from the allowed addresses, add your address to `public_access_cidrs` instead.
 
 **`i/o timeout` on the EKS API (in `up`, or from kubectl)?** Your public address changed
-(the home connection hands out a new 172.56.x address now and then; found 2026-11-18).
-Check it with `curl -s https://checkip.amazonaws.com`, put it in both
-`~/openbao/infra/30-eks/terraform.tfvars` (`endpoint_public_access_cidrs`) and
-`~/openbao/infra/40-platform/terraform.tfvars` (`public_access_cidrs`), apply layer 30
-(`terraform -chdir=$HOME/openbao/infra/30-eks apply -var-file=../common.tfvars`, ~1 min),
-then re-run `stack.sh up --restore --yes`.
+(the home connection hands out a new 172.56.x address now and then; found 2026-11-18). The
+EKS API no longer lets you in to fix it from kubectl, but `allow` only needs AWS:
+`scripts/stack.sh allow me home-lte` (replaces the entry with that label), then re-run
+`stack.sh up --restore --yes` if it was interrupted.
 
 **Unauthorized from kubectl?** Your kubeconfig uses the `agentgrid` profile: sign in again
 (`aws sso login --profile agentgrid`). Every identity that may run `stack.sh` or kubectl
