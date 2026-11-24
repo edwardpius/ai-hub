@@ -1,10 +1,59 @@
 # Operating Edward's AI Hub
 
-State as of 2026-11-17. Platform code: `~/openbao` (repo openbao-platform, branch
+State as of 2026-11-24. Platform code: `~/openbao` (repo openbao-platform, branch
 `agent-substrate`). Agent manifests: this repo (`deploy/`), synced by Argo CD. Agent code:
 `~/ai_work/agent_harness/research-agent` (branch `phase4-hub`).
 
-## Start it (e.g. the next morning)
+## From anywhere: Slack, Claude or GitHub (no laptop)
+
+Since 2026-11-24 the hub can be started, stopped and opened to a new address without the
+laptop or an AWS sign-in (design and threat model:
+[remote-stack-control.md](remote-stack-control.md); openbao-platform D-30 to D-34). The
+work runs in GitHub Actions in openbao-platform, with no stored AWS keys. Three front
+doors, same actions:
+
+| I want to… | Slack (any client, app.slack.com too) | Claude (claude.ai connector **AI Hub**) | GitHub (fallback) |
+|---|---|---|---|
+| See if it's up, cost so far, recent runs | `/hub status` | "Is the AI Hub up?" | Actions tab |
+| Start it (≈ 50 min, OpenBao restored) | `/hub up` (`up norestore` to skip the restore) | "Start the AI Hub" | Actions → **stack** → Run workflow → `up` |
+| Stop it (≈ 30 min, snapshot first) | `/hub down`, then click **Shut down** within 5 min | "Shut the hub down", then confirm | Actions → **stack** → `down` |
+| See the allowed addresses | `/hub ips` | "Show the allowed IPs" | – |
+| Allow the device I'm on | `/hub allow-me hotel 3d` | "Give me an allow-me link labelled hotel for 3 days" | – |
+| Remove an address | `/hub revoke hotel` | "Revoke hotel" | – |
+| Find out why a run failed | the **log** link in the DM | "Why did the last run fail?" (reads the log, secrets redacted) | the run's log |
+
+- **Where to type `/hub`:** in any conversation except the hub-control DM, which is
+  read-only. Your own DM works well. Replies are visible only to you.
+- **Run messages and reminders** arrive in the hub-control DM: started, then finished,
+  with the public URLs, or ACTION REQUIRED. Runs started from Claude report there too.
+  After 5 hours up you get one reminder. The budget alerts ($100/month, at 50/80/100 %)
+  come the same way. Nothing ever starts or stops on its own.
+- **An allow-me link** is valid for 10 minutes and works once. Open it on the device or
+  network to allow, press **Sign in and allow**, and sign in with Identity Center (MFA).
+  The address it records must be IPv4 and must be the same after sign-in. On a phone
+  hotspot, the laptop's address is the phone's. If the stack is up, it starts an
+  **access** run (about 3 minutes); if it's down, the next `up` uses the address.
+  Durations are like `12h` or `3d` (max 30 days), or `permanent`; the default is 24 h.
+- **Limits:** at most 6 runs started per hour. One run at a time (a second waits). `down
+  --all` and changes to the control plane itself (layer 02) only run from the laptop.
+- **Claude connector setup** (once, already done 2026-11-24): claude.ai → Settings →
+  Connectors → Add custom connector. URL `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`,
+  "Use your own OAuth client", client ID from
+  `terraform -chdir=~/openbao/infra/02-control output -raw connector_client_id`, no secret.
+  The sign-in lasts 7 days.
+- **When something's off:**
+  - `/hub` answers "Not allowed": your Slack workspace or member ID isn't in SSM
+    `/openbao-platform/tfvars/02-control`.
+  - "dispatch failed" or a GitHub error: the GitHub App isn't installed on
+    openbao-platform, or it lost Actions read/write.
+  - The link page says "IPv6 not supported": open the link on another network; it stays
+    valid.
+  - "Your address changed": the network gave you a new address during sign-in. Open the
+    link again.
+  - Claude says the connector needs a sign-in: reconnect it (Settings → Connectors).
+  - Anything else: hub-control's log, `aws logs tail /aws/lambda/hub-control --since 1h`.
+
+## Start it from the laptop (e.g. the next morning)
 
 1. Sign in to AWS (the SSO session lasts about 8 hours):
    ```bash
@@ -42,7 +91,8 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 
 The public URLs and the EKS API answer **only from the allowed addresses**: one list in SSM
 (`/openbao-platform/access/cidrs`, openbao-platform D-30). From anywhere else the browser
-(and kubectl) times out. Manage it from `~/openbao`:
+(and kubectl) times out. Away from the laptop, use `/hub allow-me` or the Claude connector
+([From anywhere](#from-anywhere-slack-claude-or-github-no-laptop)). From `~/openbao`:
 
 ```bash
 scripts/stack.sh ips                              # what's allowed, and until when
@@ -79,7 +129,7 @@ must be in `cluster_admin_principals` (`~/openbao/infra/30-eks/terraform.tfvars`
 Only one process can hold a local port: stop an old port-forward before starting a new one
 (`lsof -nP -iTCP:4180 -sTCP:LISTEN` shows who has it).
 
-## Stop it (e.g. every evening)
+## Stop it from the laptop (e.g. every evening)
 
 ```bash
 aws sso login --profile agentgrid   # if the session expired
@@ -118,6 +168,7 @@ suspend/resume, logs): [agent-substrate.md](agent-substrate.md).
 | research-agent reports bucket (persistent), research-reports Pod Identity role, `/reports/` download route on the kagent host | S3; `agents`; `kagent` (sign-out nginx) | openbao-platform layers 05, 45 (research-agent spec 026) |
 | secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
 | Slack bridge (Socket Mode, account linking, A2A through oauth2-proxy); users' refresh tokens in OpenBao `slack-links/` | `agents`; OpenBao | this repo, `deploy/agents/slack-bridge.yaml` (Argo CD); code in `../slack-bridge`; Cognito client, routes, mount and policy in openbao-platform layers 25, 45, 50 (D-28, D-29) |
+| Remote control (persistent): hub-control Lambda (Slack `/hub`, Claude connector, allow-me links, run DMs, reminder, budget alerts), its IPv4 API Gateway, DynamoDB table, two Secrets Manager secrets; GitHub Actions role `hub-deployer`; budget `ai-hub-monthly` | us-west-2; workflows in openbao-platform `.github/workflows` | openbao-platform layer 02 (D-31 to D-34), applied only from the laptop |
 | secrets-sync reconciler + ESO stores: `apps/` secrets with AWS sync on -> Secrets Manager `openbao/...` | `secrets-sync` | openbao-platform layer 60 `apps_sync.tf` (D-27); image pinned in its local `terraform.tfvars` |
 
 Model: Claude Opus 4.6 on Bedrock (`us.anthropic.claude-opus-4-6-v1`) until Bedrock serves
@@ -181,6 +232,9 @@ $0.19 at Anthropic list prices; check Bedrock's Marketplace rate on the bill) pl
 token.
 
 Levers:
+- **The remote control plane** (hub-control, its API, table, schedule, two secrets, the
+  budget topic) costs about $1–2/month and stays while the hub is down. The budget
+  `ai-hub-monthly` ($100, account-wide) alerts in Slack at 50/80/100 % and on the forecast.
 - **Run it only when used.** Business hours (8 h × 22 days) ≈ **$113/month** plus usage
   (the public endpoints add about $6 of that); stopped ≈ $2.50/month.
 - The workloads nodes are 55% of the bill: Spot (−60–70%, fine for a POC), or 2 × t3.large

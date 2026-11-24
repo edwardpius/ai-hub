@@ -63,27 +63,42 @@ idle.
 
 ```mermaid
 flowchart LR
-  subgraph Front doors
-    S[Slack: /hub up, down, status, ips, allow-me, revoke]
-    C[Claude: hub-control connector<br/>claude.ai web + mobile]
-    P[GitHub app / web:<br/>Run workflow]
+  subgraph Doors["Front doors"]
+    S["Slack /hub<br/>any Slack client"]
+    C["Claude connector<br/>claude.ai web, desktop, mobile"]
+    B["Browser on the device to allow<br/>one-time allow-me link"]
+    G["GitHub: Run workflow<br/>fallback"]
   end
-  subgraph AWS, persistent, us-west-2
-    L[hub-control Lambda<br/>Function URL]
-    SM[(Secrets Manager:<br/>GitHub App key,<br/>Slack signing secret)]
-    SSM[(SSM: tfvars,<br/>allowed CIDRs)]
-    R[IAM role hub-deployer<br/>trusts GitHub OIDC]
+  subgraph AWS["AWS, persistent: layer 02, survives down"]
+    FU["Lambda Function URL<br/>/slack/*"]
+    GW["API Gateway, IPv4 only<br/>/mcp, /oauth/*, /allow*"]
+    L["hub-control Lambda<br/>who may act, fixed actions"]
+    COG["Cognito pool, layer 25<br/>Identity Center + MFA"]
+    DB[("DynamoDB<br/>links, run threads, rate limit")]
+    SM[("Secrets Manager<br/>Slack app, GitHub App key")]
+    SSM[("SSM<br/>tfvars, allowed CIDRs")]
+    SCH["Scheduler, every 30 min<br/>up-for-5-h reminder"]
+    BUD["Budget, $100/month<br/>via SNS"]
+    R["IAM role hub-deployer<br/>OIDC trust + guardrails"]
   end
-  subgraph GitHub, private repo openbao-platform
-    W[workflows: stack.yml, access.yml]
+  subgraph GH["GitHub, private repo openbao-platform"]
+    W["stack.yml, access.yml<br/>stack.sh --ci"]
   end
-  S -- signed request --> L
-  C -- MCP over HTTPS, OAuth via Cognito/Identity Center --> L
-  L -- workflow_dispatch as a GitHub App --> W
-  P --> W
-  W -- OIDC, no stored keys --> R
-  R --> STACK[openbao-platform layers 00..60<br/>stack.sh up/down]
-  W -- result + ACTION REQUIRED --> S
+  STACK["AI Hub layers 10-60<br/>created by up, removed by down"]
+
+  S -- "signed request" --> FU --> L
+  C -- "MCP + OAuth" --> GW
+  B --> GW --> L
+  C -. "sign-in" .-> COG
+  B -. "sign-in" .-> COG
+  L -- "workflow_dispatch<br/>GitHub App, actions only" --> W
+  G --> W
+  W -- "OIDC, no stored keys" --> R --> STACK
+  W -- "started / finished" --> L
+  L -- "DMs" --> S
+  SCH --> L
+  BUD --> L
+  L --- DB
   L --- SM
   L --- SSM
   W --- SSM
@@ -92,6 +107,12 @@ flowchart LR
 One control point (the Lambda) behind both front doors, so the rules (who may do what) are
 written once. GitHub's own "Run workflow" button stays as a fallback that needs neither
 Slack nor Claude.
+
+As built (2026-11-24): Slack reaches the Lambda through its Function URL. Everything a
+browser or claude.ai opens goes through a small IPv4-only API Gateway in front of the same
+Lambda: the IPv4 address a device shows there is the one the hub will see (§5), and the
+Function URL would rename the `WWW-Authenticate` header that MCP clients need (§6). The
+runs report back through the Lambda, so the Slack token never reaches GitHub.
 
 ## 3. Runner: GitHub Actions in openbao-platform
 
@@ -167,6 +188,29 @@ Lambda). Lambda Function URLs are dual-stack, and on an IPv6 network such as T-M
 first version saw an IPv6 address; the hub's endpoints are IPv4-only, so they see that
 device through the carrier's IPv4 gateway, which is the address the link must record.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as You, in Slack or Claude
+  participant D as Browser on the device to allow
+  participant H as hub-control, API Gateway (IPv4)
+  participant CG as Cognito, then Identity Center
+  participant P as SSM allowlist
+  participant A as GitHub access.yml
+  U->>H: /hub allow-me hotel 3d, or hub_allow_me_link
+  H-->>U: one-time link, valid 10 min
+  D->>H: GET /allow (preview only, so link unfurlers can't use it)
+  D->>H: POST /allow from address A (IPv4 only)
+  H-->>D: redirect to sign-in (PKCE)
+  D->>CG: sign in with MFA
+  CG-->>D: back to /allow/callback
+  D->>H: GET /allow/callback (must still be address A)
+  H->>CG: exchange the code, check it's the operator
+  H->>P: add A/32 as "hotel", expires in 3 days
+  H->>A: dispatch, if the stack is up
+  H-->>U: Slack DM: allowed, applying
+```
+
 The link is needed because a Slack or Claude request reaches AWS from Slack's or
 Anthropic's servers: the Lambda would see their IP, not yours. Entries persist across
 `down`, so the next `up` already includes them. Expired entries are only ignored, never
@@ -217,6 +261,31 @@ did the last down fail?", "let me in from this hotel".
   publishes the OAuth discovery documents and passes sign-in and token requests through to
   Cognito for that one client and the claude.ai callback only. Tokens are accepted only for
   your Cognito `sub`; claude.ai stays signed in for 7 days.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as claude.ai
+  participant H as hub-control, API Gateway /mcp
+  participant CG as Cognito
+  participant IC as Identity Center
+  C->>H: POST /mcp without a token
+  H-->>C: 401, WWW-Authenticate points to the resource metadata
+  C->>H: GET /.well-known/oauth-protected-resource and oauth-authorization-server
+  H-->>C: the authorization server is hub-control itself, PKCE S256
+  C->>H: GET /oauth/authorize (client ID, PKCE, state, resource)
+  H-->>C: redirect to Cognito: this client and callback only, resource dropped, straight to Identity Center
+  C->>CG: your browser signs in
+  CG->>IC: SAML
+  IC-->>CG: assertion, after MFA
+  CG-->>C: code, to claude.ai/api/mcp/auth_callback
+  C->>H: POST /oauth/token (code, verifier)
+  H->>CG: the same request, known fields only
+  CG-->>C: access token 60 min, refresh token 7 days
+  C->>H: POST /mcp with the bearer token
+  H->>H: check signature (pool keys), client, expiry, operator sub
+  H-->>C: tools/list, tools/call results
+```
 - Tools: `hub_status`, `hub_up`, `hub_down` (needs `confirm: true`), `hub_ips`,
   `hub_allow_me_link`, `hub_revoke`, `hub_run_log(run_id)` (the last N lines of a run,
   known secret patterns redacted, so Claude can explain a failure).
