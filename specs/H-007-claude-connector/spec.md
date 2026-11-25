@@ -25,24 +25,17 @@ mission of offering the hub's agents to signed-in users where they already work.
 - Claude Code and the Claude API's MCP connector (same server would work; not tested here).
 - Changes to kagent or to research-agent's code.
 
-## Open questions
+## Resolved questions
 
-- [NEEDS CLARIFICATION Q1: **How claude.ai reaches the hub.** claude.ai calls connectors from
-  Anthropic's servers (published outbound ranges: `160.79.104.0/21`, plus `153.61.208.0/20`
-  on the API IP page), not from your browser, and the ALB admits only your /32s (HD-005).
-  (a) An ALB listener rule that admits Anthropic's ranges **only** for the connector's
-  paths on the kagent host; everything else stays on your /32s. (b) An MCP tunnel
-  (outbound-only from the cluster, no ALB change), if your claude.ai plan offers tunnels.
-  Recommended: check (b)'s availability first; otherwise (a).]
-- [NEEDS CLARIFICATION Q2: **Who may use it.** (a) Operator only (`operator_cognito_subs`,
-  as D-33), or (b) any user assigned to the app in Identity Center, as the UI and Slack.
-  Recommended: (b), since identity and per-user isolation already come from Cognito and
-  kagent; (a) if you want to keep it to yourself while it's new.]
-- [NEEDS CLARIFICATION Q3: **Tools beyond asking.** Also list and read your earlier reports
-  (`list_my_reports`, `get_report`)? Recommended: yes, read-only, own reports only.]
-- [NEEDS CLARIFICATION Q4: **Where the code lives.** (a) Its own public repo,
-  `research-mcp`, like `slack-bridge`; (b) a second entry point in `slack-bridge` (shares the
-  A2A client). Recommended: (a); the two fail and deploy independently.]
+- Resolved 2026-11-25 (Q1, how claude.ai reaches the hub): an **ALB listener rule** admits
+  Anthropic's published outbound ranges (`160.79.104.0/21`, and `153.61.208.0/20` from the
+  API IP page) **only** for `/research/*` on the kagent host; everything else stays on your
+  /32s. MCP tunnels were ruled out: research preview, Claude Enterprise only.
+- Resolved 2026-11-25 (Q2, who): any user assigned to the app in Identity Center, as the UI
+  and Slack; identity and per-user isolation come from Cognito and kagent.
+- Resolved 2026-11-25 (Q3): yes, `list_my_reports` and `get_report`, read-only, the
+  caller's own reports only.
+- Resolved 2026-11-25 (Q4): its own public repo, `research-mcp`, like `slack-bridge`.
 
 ## Requirements
 
@@ -61,8 +54,7 @@ mission of offering the hub's agents to signed-in users where they already work.
   NOT create, sign or alter a token (as H-006 REQ-17).
 - **REQ-04** IF a request to `/research/mcp` has no bearer token, or one that fails
   signature, `iss`, `aud`, `token_use=id` or expiry checks, THEN THE SERVER SHALL answer 401
-  with `WWW-Authenticate` and call nothing. (Q2 (a) adds: IF the `sub` isn't an operator
-  THEN 403.)
+  with `WWW-Authenticate` and call nothing.
 - **REQ-05** The refresh-token lifetime of `research-mcp-claude` SHALL be 7 days (as H-006
   REQ-07 and D-33), which bounds how long a removed user keeps access.
 
@@ -92,7 +84,7 @@ mission of offering the hub's agents to signed-in users where they already work.
 - **REQ-13** THE SERVER's egress SHALL be limited to Cognito's endpoints and the kagent
   oauth2-proxy Service; its ingress to `/research/*` on the kagent host.
 - **REQ-14** Only `/research/mcp`, `/research/oauth/*` and the `/.well-known/` paths for it
-  SHALL be reachable from outside your /32s (Q1). Every other path and host on the ALB SHALL
+  SHALL be reachable from outside your /32s. Every other path and host on the ALB SHALL
   stay behind the allowlist.
 - **REQ-15** WHEN the server is stopped THE kagent UI and Slack SHALL keep working, showing
   the conversations and reports started from claude.ai.
@@ -126,7 +118,7 @@ rule allow; human in the loop n/a.
 | Side effects | none · Risk tier low · Idempotent yes |
 | Errors | "Run not found" (also for another user's run, REQ-07) |
 
-### `list_my_reports`, `get_report` (Q3)
+### `list_my_reports`, `get_report`
 
 Read-only, the caller's own reports from the reports bucket through the same path the UI
 uses. Risk tier low.
@@ -174,7 +166,7 @@ you allow it.
   IDs, outcome, duration, `via=claude`. The A2A call carries the trace context so the
   research-agent trace links under it in Phoenix.
 - Structured log lines for refusals (`mcp refused` with the reason: no token, bad
-  signature, wrong audience, expired, not operator) and OAuth steps (status codes only),
+  signature, wrong audience, expired, not assigned) and OAuth steps (status codes only),
   with the caller's source IP, to confirm Anthropic's ranges in practice.
 - ALB access logs for `/research/*` during the evals (what claude.ai sends, retries,
   timing).
@@ -227,14 +219,14 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
 
 ## Tasks
 
-1. Answer Q1 to Q4; HD-007 accepted.
+1. Q1 to Q4 answered and HD-007 accepted, 2026-11-25.
 2. Confirm on the cluster that oauth2-proxy accepts an ID token of a new client's audience
    as a bearer token (as H-006 task 2; the `extra-jwt-issuers` entry) and that kagent sees
    the same principal as in the UI.
 3. openbao-platform: the `research-mcp-claude` Cognito client; the oauth2-proxy
-   `extra-jwt-issuers` entry; the `/research/*` route and the ALB rule (Q1 (a)) or the
-   tunnel (Q1 (b)); ECR repo; decision D-35.
-4. The server (repo per Q4): MCP over streamable HTTP, the OAuth pass-through and metadata
+   `extra-jwt-issuers` entry; the `/research/*` route and the path-scoped ALB rule for
+   Anthropic's ranges; ECR repo; decision D-35.
+4. The server (repo `research-mcp`): MCP over streamable HTTP, the OAuth pass-through and metadata
    (ported from hub-control), the A2A client (from `slack-bridge`), OTel, unit tests.
 5. Image (trixie, non-root, Trivy clean of fixable findings), release script, manifests in
    `deploy/agents/research-mcp.yaml` with a network policy (REQ-13).
