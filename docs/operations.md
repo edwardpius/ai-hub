@@ -137,6 +137,7 @@ plugin (see `~/openbao/infra/45-agent-substrate/README.md`), jq, openssl, curl, 
 | OpenBao CLI | `export BAO_ADDR=https://openbao.edwardpius.me` | `bao login -method=oidc` or `-method=aws` |
 | Argo CD | printed by `stack.sh up` | Identity Center |
 | research-agent from Slack | DM the **research-agent** app, or `@research-agent <question>` in an allowed channel (pick the mention from Slack's list) | Once, through a private sign-in link (Identity Center); lasts 7 days. See [Slack bridge](#slack-bridge) |
+| research-agent from claude.ai | A chat with the **Research** connector on (**+** menu): "Use the Research connector: …" | Once, when you add the connector (Identity Center); lasts 7 days. Works from anywhere, no allowlist entry needed. See [Research connector](#research-connector-claudeai) |
 
 The public URLs and the EKS API answer **only from the allowed addresses**: one list in SSM
 (`/openbao-platform/access/cidrs`, openbao-platform D-30). From anywhere else the browser
@@ -217,6 +218,7 @@ suspend/resume, logs): [agent-substrate.md](agent-substrate.md).
 | research-agent reports bucket (persistent), research-reports Pod Identity role, `/reports/` download route on the kagent host | S3; `agents`; `kagent` (sign-out nginx) | openbao-platform layers 05, 45 (research-agent spec 026) |
 | secrets-agent (kagent runtime on Agent Substrate), secrets-mcp server; OpenBao `apps/` mount | `kagent`, `agents`; OpenBao | this repo, `deploy/` (Argo CD); code in `../secrets-agent`; mount and policies in openbao-platform layer 50 (D-25) |
 | Slack bridge (Socket Mode, account linking, A2A through oauth2-proxy); users' refresh tokens in OpenBao `slack-links/` | `agents`; OpenBao | this repo, `deploy/agents/slack-bridge.yaml` (Argo CD); code in `../slack-bridge`; Cognito client, routes, mount and policy in openbao-platform layers 25, 45, 50 (D-28, D-29) |
+| Research connector for claude.ai: research-mcp (MCP, OAuth front, A2A through oauth2-proxy) on its own ALB `research.edwardpius.me` | `agents`; Gateway `gateway/connector` | this repo, `deploy/agents/research-mcp.yaml` (Argo CD); code in `../research-mcp`; Cognito client, oauth2-proxy audience, connector ALB, ECR, OpenBao settings in openbao-platform layers 05, 25, 40, 45, 50 (D-35) |
 | Remote control (persistent): hub-control Lambda (Slack `/hub`, Claude connector, allow-me links, run DMs, reminder, budget alerts), its IPv4 API Gateway, DynamoDB table, two Secrets Manager secrets; GitHub Actions role `hub-deployer`; budget `ai-hub-monthly` | us-west-2; workflows in openbao-platform `.github/workflows` | openbao-platform layer 02 (D-31 to D-34), applied only from the laptop |
 | secrets-sync reconciler + ESO stores: `apps/` secrets with AWS sync on -> Secrets Manager `openbao/...` | `secrets-sync` | openbao-platform layer 60 `apps_sync.tf` (D-27); image pinned in its local `terraform.tfvars` |
 
@@ -272,8 +274,9 @@ Running 24/7:
 | **Platform subtotal** | | **≈ $437** |
 | Public endpoints: ALB | 1, light traffic (LCU ~$1) | ~17.40 |
 | Public endpoints: ALB's public IPv4 addresses | 2 (one per AZ) | 7.30 |
+| Research connector ALB (HD-008), its 2 IPv4 addresses | 1, light traffic | ~24.70 |
 | Route 53 hosted zone `edwardpius.me` | 1 (existed before) | 0.50 |
-| **Total** | | **≈ $462/month** |
+| **Total** | | **≈ $487/month** |
 
 Usage: about **$0.15–0.20 per research question** (Claude Opus 4.6, measured $0.14 and
 $0.19 at Anthropic list prices; check Bedrock's Marketplace rate on the bill) plus at most
@@ -285,7 +288,8 @@ Levers:
   budget topic) costs about $1–2/month and stays while the hub is down. The budget
   `ai-hub-monthly` ($100, account-wide) alerts in Slack at 50/80/100 % and on the forecast.
 - **Run it only when used.** Business hours (8 h × 22 days) ≈ **$113/month** plus usage
-  (the public endpoints add about $6 of that); stopped ≈ $2.50/month.
+  (the public endpoints add about $6 of that, the Research connector ALB about $6 more);
+  stopped ≈ $2.50/month.
 - The workloads nodes are 55% of the bill: Spot (−60–70%, fine for a POC), or 2 × t3.large
   (−$120) once utilization is measured, or Graviton t4g (−20%, needs arm64 images).
 
@@ -323,12 +327,59 @@ its allowlist. It posts a summary and the full report as a file in the thread.
 - **Release:** `AWS_PROFILE=agentgrid scripts/release-slack-bridge.sh ../slack-bridge`.
   It runs the bridge's tests and pins `deploy/agents/slack-bridge.yaml`; commit and push.
 
+## Research connector (claude.ai)
+
+Ask research-agent from a Claude chat (HD-007, HD-008, spec H-007). claude.ai calls
+`https://research.edwardpius.me/mcp` from Anthropic's servers; research-mcp starts the run
+**as you**, with your own ID token, through kagent's oauth2-proxy, the same path as the
+Slack bridge. Runs and reports show in the kagent UI under the same user.
+
+**Set it up (once per claude.ai account; done 2026-11-25):**
+1. claude.ai → **Customize** → Connectors (<https://claude.ai/customize/connectors>) →
+   **Add** → **Add custom connector**. Name **Research**, URL
+   `https://research.edwardpius.me/mcp`, **Continue**.
+2. Authentication **Sign in now**; OAuth client **Use your own OAuth client**, client ID
+   from `terraform -chdir=$HOME/openbao/infra/25-cognito output -raw research_mcp_client_id`,
+   secret empty (public client). **Add**, then **Connect** and sign in through Identity
+   Center (MFA).
+
+**Use it:** in a chat, **+** → turn **Research** on, then ask, for example: "Use the
+Research connector: call research_start with this question, then research_result until
+it's done: …". Claude starts the run, then polls: `research_result` waits up to 45 s and
+says "still running" until the report is ready (usually 1–3 minutes, about $0.30). Also
+`research_status`, `list_my_reports` (runs started from Claude in the last 24 hours) and
+`get_report` (any of your reports, by its link).
+
+- **Limits:** one run at a time per user, 20 a day, 10 minutes a run. Anyone assigned to
+  the app in Identity Center can use it, each seeing only their own runs.
+- **Only while the hub is up.** When it's down, the connector can't be reached; the
+  **AI Hub** connector's `hub_status` says so, and `hub_up` starts it.
+- **No allowlist needed:** the connector has its own ALB that admits Anthropic's ranges
+  (`160.79.104.0/21`, `153.61.208.0/20`) plus the allowlist (your browser signs in through
+  it). The hub ALB never admits Anthropic's ranges.
+- **Logs:** `kubectl -n agents logs deploy/research-mcp`. One line per tool call (`mcp tool`,
+  hashed user, outcome, caller IP), per run (`run started`, `run finished` with seconds),
+  and per refusal (`mcp refused` with the reason). Error messages in Claude carry a
+  reference that matches a log line. No tokens, questions or reports are logged.
+- **"Bad Gateway" in Claude:** a call held open past 60 s (the ALB's idle timeout). The
+  server holds 45 s, so this means something is slow; check the log.
+- **Sign-in problems:** reconnect in Customize → Connectors → Research. After the Cognito
+  pool is re-created (`stack.sh up` reminds you): the client ID changes. Remove the
+  connector and add it again with the new ID, and restart the pod so it reads the new
+  settings: `kubectl -n agents rollout restart deploy/research-mcp`.
+- **Release:** `AWS_PROFILE=agentgrid scripts/release-research-mcp.sh ../research-mcp`.
+  It runs the server's tests and pins `deploy/agents/research-mcp.yaml`; scan with Trivy,
+  commit and push.
+
 ## Known gaps and next steps
 
 - **oauth2-proxy logs the Slack sign-in callback URL with its one-time code.** The code is
   used within a second and is useless without the bridge's PKCE verifier, but it shouldn't
   be logged. The fix is to exclude the path from request logging (layer 45).
 - H-006: all evals passed (EVAL-01 and EVAL-04 on 2026-11-20); results are on the roadmap line.
+- H-007 (Research connector): `list_my_reports` only knows runs started from Claude in the
+  last 24 hours; a list endpoint in research-agent's reports service would cover all of
+  them. EVAL-07 (hub down) is checked at the next `down`.
 
 - **Hands-free?** `down` ran unattended on 2026-11-17 (its finalizer retry fired as
   designed). The last `up` needed a re-run after an expired SSO session and one fix

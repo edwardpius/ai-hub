@@ -296,3 +296,19 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   text). Server side: 10 runs finished, 21 `research_result` calls (about two polls a run
   at `HOLD_S` 45 s), no refusals or errors. EVAL-01 passed with it (connector added by the
   `operations.md` steps, signed in as `agentgrid`, tools listed and used).
+- 2026-11-25, **EVAL-03 passed:** a report asked for in claude.ai shows for the same user in
+  the kagent UI (checked by the operator).
+- 2026-11-25, **EVAL-04 passed** on the live endpoint: no token, `alg: none`, HS256, a forged
+  RS256 signature, and forged expired and other-audience tokens each got 401 with
+  `error="invalid_token"` (no token: the bare challenge); the server logged the reason for
+  each (`malformed`, `alg`, `signature`). The expiry and audience checks themselves, behind
+  the signature check, are covered offline with properly signed tokens; another user's
+  run is "not found" (offline, REQ-07).
+- 2026-11-25, **EVAL-05 passed** from inside the allowlist: the connector ALB answers 404 for
+  the kagent, arize and openbao host names; exactly one route (`agents/research-mcp`)
+  is attached to it; the hub ALB's security group still admits only the two /32s. A probe
+  from Anthropic's own range (claude.ai's web fetch) is the remaining outside check.
+- 2026-11-25, tasks 6 and 8: research-agent's trifecta declaration (`01e7282`),
+  architecture section 3 and `hub.d2` (`6a3f27b`), `docs/operations.md` "Research
+  connector", openbao-platform RUNBOOK and `stack.sh` reminder (`e111369`), IcePanel
+  (deployment and context diagrams: Connector ALB, research-mcp, claude.ai).
