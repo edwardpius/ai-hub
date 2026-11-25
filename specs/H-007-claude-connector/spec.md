@@ -222,7 +222,7 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
 1. Q1 to Q4 answered and HD-007 accepted, 2026-11-25.
 2. Confirm on the cluster that oauth2-proxy accepts an ID token of a new client's audience
    as a bearer token (as H-006 task 2; the `extra-jwt-issuers` entry) and that kagent sees
-   the same principal as in the UI.
+   the same principal as in the UI. Done 2026-11-25: passed (Results).
 3. openbao-platform: the `research-mcp-claude` Cognito client; the oauth2-proxy
    `extra-jwt-issuers` entry; the `/research/*` route and the path-scoped ALB rule for
    Anthropic's ranges; ECR repo; decision D-35.
@@ -237,4 +237,12 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
 
 ## Results
 
-None yet.
+- 2026-11-25, task 2 (oauth2-proxy check): **passed, 7 of 7**
+  (`scripts/check-research-mcp-token.py`, openbao-platform `385bfb7` applied: Cognito client
+  `research-mcp-claude`, a second `extra-jwt-issuers` audience). Signed in as `agentgrid`
+  through the new client; on research-agent's agent card through the kagent host: no token
+  403; the client's ID token 200; broken signature 403; another audience 403; the client's
+  **access** token 403 (confirms REQ-03: claude.ai must get the ID token); a refreshed ID
+  token 200. The token's `iss` and `sub` (`a84183f0-…`) are the same as the user's in the
+  UI and Slack, which is how kagent identifies the principal (HD-006), so the same user is
+  seen through every way in.
