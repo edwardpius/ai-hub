@@ -230,7 +230,7 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
 3. openbao-platform: the `research-mcp-claude` Cognito client; the oauth2-proxy
    `extra-jwt-issuers` entry; the connector ALB (`connector-gateway`, Anthropic's
    ranges plus your /32s); ECR repo; remove the check's localhost callback; decision
-   D-35. Written 2026-11-25 (openbao-platform, layers 05, 25, 40), to apply.
+   D-35. Done 2026-11-25 (openbao-platform `447cda3`, applied; Results).
 4. The server (repo `research-mcp`): MCP over streamable HTTP, the OAuth pass-through and metadata
    (ported from hub-control), the A2A client (from `slack-bridge`), OTel, unit tests.
 5. Image (trixie, non-root, Trivy clean of fixable findings), release script, manifests in
@@ -252,3 +252,10 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   UI and Slack, which is how kagent identifies the principal (HD-006), so the same user is
   seen through every way in. Regression: a Slack DM to research-agent afterwards was
   answered (the bridge's audience still accepted alongside the new one).
+- 2026-11-25, task 3 applied: Gateway `connector` Accepted and Programmed, 0 routes; ALB
+  `openbao-nonprod-connector` active, its security group admits 443 from exactly
+  `160.79.104.0/21`, `153.61.208.0/20` and the two allowlisted /32s; the hub ALB's group
+  still admits only the /32s. The connector ALB has **no listener** until a route attaches
+  (the load balancer controller creates it with the first route), so nothing answers from
+  Anthropic's ranges before task 5. ECR `research-mcp` (immutable tags);
+  `research-mcp-claude` now has only claude.ai's callback.
