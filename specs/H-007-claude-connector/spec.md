@@ -312,3 +312,16 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   architecture section 3 and `hub.d2` (`6a3f27b`), `docs/operations.md` "Research
   connector", openbao-platform RUNBOOK and `stack.sh` reminder (`e111369`), IcePanel
   (deployment and context diagrams: Connector ALB, research-mcp, claude.ai).
+- 2026-11-25, **EVAL-07 passed** (hub down): `research_status` from claude.ai failed within
+  about 7 s (including Claude's own overhead) with "MCP server Research is not connected"
+  (a 502 from claude.ai's connection attempt), no hang and no request to sign in again;
+  the AI Hub connector's `hub_status` reported the hub down and the last `down`
+  successful. **All H-007 evals passed.**
+- 2026-11-25, teardown findings from the first `down` with the connector: (1) the 30-eks
+  inputs still named the deleted IAM user `upbound` as a cluster admin, and the EKS KMS
+  key policy update failed on the invalid principal (removed from SSM and the local
+  tfvars); (2) research-mcp's TargetGroupConfiguration kept the load balancer
+  controller's finalizer after the controller was uninstalled, holding namespace `agents`
+  in Terminating; `stack.sh` now deletes TargetGroupConfigurations in `drain_gateway`
+  and clears leftover controller finalizers before retrying layer 40 (openbao-platform
+  `30138bf`). The third `down` succeeded.

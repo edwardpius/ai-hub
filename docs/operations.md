@@ -379,7 +379,7 @@ says "still running" until the report is ready (usually 1–3 minutes, about $0.
 - H-006: all evals passed (EVAL-01 and EVAL-04 on 2026-11-20); results are on the roadmap line.
 - H-007 (Research connector): `list_my_reports` only knows runs started from Claude in the
   last 24 hours; a list endpoint in research-agent's reports service would cover all of
-  them. EVAL-07 (hub down) is checked at the next `down`.
+  them.
 
 - **Hands-free?** `down` ran unattended on 2026-11-17 (its finalizer retry fired as
   designed). The last `up` needed a re-run after an expired SSO session and one fix
