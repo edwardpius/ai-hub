@@ -1,0 +1,241 @@
+# research-mcp: ask research-agent from claude.ai (HD-007, HD-008, spec H-007).
+# A normal Deployment: it holds runs open over A2A while claude.ai polls.
+#
+# In:  HTTPS from claude.ai (Anthropic's ranges) and your browser (sign-in), through the
+#      connector ALB only (Gateway gateway/connector, openbao-platform D-35), which reaches
+#      the pod from the public subnets.
+# Out: Cognito (443: JWKS and token endpoint), research-agent and the reports through
+#      kagent's oauth2-proxy (4180) with the caller's own ID token, the Collector.
+#
+# Settings from OpenBao through ESO:
+#   kv/projects/research-mcp/cognito  the connector's public Cognito client (layer 50)
+# No secrets: the client is public, and the server keeps no tokens (REQ-12).
+# IMAGE: set by scripts/release-research-mcp.sh.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: research-mcp
+  namespace: agents
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: openbao-agents
+  target:
+    name: research-mcp
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: projects/research-mcp/cognito
+---
+# No OpenBao login and no Kubernetes RBAC.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: research-mcp
+  namespace: agents
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-mcp
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: research-mcp
+    app.kubernetes.io/part-of: research-agent
+spec:
+  # One replica: runs and the one-run-per-user check live in process memory (H-007).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: research-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: research-mcp
+        app.kubernetes.io/part-of: research-agent
+    spec:
+      serviceAccountName: research-mcp
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        workload-class: workloads
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: research-mcp
+          image: 288417637285.dkr.ecr.us-west-2.amazonaws.com/research-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: research-mcp
+          env:
+            - name: PUBLIC_BASE_URL
+              value: https://research.edwardpius.me
+            - name: UI_BASE_URL
+              value: https://kagent.edwardpius.me
+            - name: RUN_TIMEOUT_S
+              value: "600"
+            - name: RUNS_PER_DAY
+              value: "20"
+            # How long research_result waits (REQ-10): set from EVAL-06.
+            - name: HOLD_S
+              value: "45"
+            # EVAL-06 only (adds debug_hold); remove after the probe.
+            - name: PROBE_TOOL
+              value: "1"
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-mcp
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: research-mcp
+spec:
+  selector:
+    app.kubernetes.io/name: research-mcp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# https://research.<domain> on the connector ALB (HD-008). ExternalDNS writes the record
+# from this route. The Gateway accepts routes from `agents` only.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: research-mcp
+  namespace: agents
+  annotations:
+    external-dns.alpha.kubernetes.io/ttl: "60"
+spec:
+  parentRefs:
+    - name: connector
+      namespace: gateway
+      sectionName: https
+  hostnames:
+    - research.edwardpius.me
+  rules:
+    - backendRefs:
+        - name: research-mcp
+          port: 8080
+---
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: research-mcp
+  namespace: agents
+spec:
+  targetReference:
+    name: research-mcp
+  defaultConfiguration:
+    targetType: ip
+    protocol: HTTP
+    healthCheckConfig:
+      healthCheckProtocol: HTTP
+      healthCheckPath: /healthz
+      healthCheckInterval: 15
+      healthyThresholdCount: 2
+      unhealthyThresholdCount: 3
+      matcher:
+        httpCode: "200"
+    targetGroupAttributes:
+      - key: deregistration_delay.timeout_seconds
+        value: "30"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: research-mcp
+  namespace: agents
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: research-mcp
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    # The ALBs' addresses in the public subnets (openbao-platform layer 10), as for
+    # Phoenix and OpenBao. Only the connector ALB has a route to this Service.
+    - from:
+        - ipBlock:
+            cidr: 10.42.48.0/24
+        - ipBlock:
+            cidr: 10.42.49.0/24
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # research-agent and the reports, via oauth2-proxy (never the controller directly).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: oauth2-proxy
+      ports:
+        - port: 4180
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 4318
+          protocol: TCP
+    # Cognito (JWKS, token endpoint), through the NAT.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+      ports:
+        - port: 443
+          protocol: TCP
