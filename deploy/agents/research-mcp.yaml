@@ -88,12 +88,10 @@ spec:
               value: "600"
             - name: RUNS_PER_DAY
               value: "20"
-            # How long research_result waits (REQ-10): set from EVAL-06.
+            # How long research_result waits (REQ-10). EVAL-06 (2026-11-25): the connector
+            # ALB's 60 s idle timeout cuts longer calls first; 45 s leaves a margin.
             - name: HOLD_S
               value: "45"
-            # EVAL-06 only (adds debug_hold); remove after the probe.
-            - name: PROBE_TOOL
-              value: "1"
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
           readinessProbe:

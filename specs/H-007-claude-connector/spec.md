@@ -241,7 +241,8 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
 5. Image (trixie, non-root, Trivy clean of fixable findings), release script, manifests in
    `deploy/agents/research-mcp.yaml` with a network policy (REQ-13).
 6. research-agent: add claude.ai to the trifecta declaration (doc only).
-7. EVAL-06 first, then set REQ-10; then EVAL-01 to EVAL-05 and EVAL-07.
+7. EVAL-06 first, then set REQ-10; then EVAL-01 to EVAL-05 and EVAL-07. EVAL-06 done
+   2026-11-25: `HOLD_S` = 45 s (Results).
 8. `docs/operations.md` (connector setup for **Research**, as for **AI Hub**),
    `stack.sh` checks, architecture and IcePanel diagrams; tick the roadmap box.
 
@@ -279,3 +280,10 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   `research.<domain>`. From outside: `/mcp` without a token 401 with the
   `resource_metadata` challenge; both discovery documents served; `/oauth/authorize` with
   an unknown client 400; another Host header on the connector ALB 404.
+- 2026-11-25, EVAL-06 (timeout probe, `debug_hold` from claude.ai): 30 s returned; 60, 120
+  and 240 s failed in claude.ai as "Bad Gateway". The server completed the holds it logged
+  (30, 60, 120 s); the connector ALB counted three 504s: its idle timeout (60 s default)
+  cuts the call before claude.ai's own limit, which stays unmeasured. **`HOLD_S` = 45 s**
+  (REQ-10), the ALB unchanged; `research_result` says "still running" and Claude calls
+  again. Probe tool removed. Same log: calls came from `160.79.106.x` (inside Anthropic's
+  `160.79.104.0/21`), and the sign-in's token exchange returned 200 (EVAL-01, sign-in part).
