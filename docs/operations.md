@@ -48,7 +48,8 @@ doors, same actions:
     valid.
   - "Your address changed": the network gave you a new address during sign-in. Open the
     link again.
-  - Claude says the connector needs a sign-in: reconnect it (Settings → Connectors).
+  - Claude says the connector needs a sign-in: reconnect it (Customize → your connectors,
+    <https://claude.ai/customize/connectors/yours>).
   - Anything else: hub-control's log, `aws logs tail /aws/lambda/hub-control --since 1h`.
 
 ### Set up the Claude connector (once)
@@ -71,25 +72,35 @@ user pool is re-created (step 5). The run commands are from the laptop, signed i
    (`aws logs tail /aws/lambda/hub-control --since 15m | grep "mcp refused"`). Put the `sub`
    into `operator_cognito_subs` (see "Inputs" in the openbao-platform RUNBOOK) and apply
    layer 02 from the laptop (`scripts/stack.sh up` does it).
-2. **Add the connector.** claude.ai → Settings → Connectors → **Add custom connector**:
-   - Name: **AI Hub**
-   - URL: `terraform -chdir=$HOME/openbao/infra/02-control output -raw connector_url`
-     (now `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`)
-   - Advanced settings → OAuth Client ID:
+2. **Add the connector.** In claude.ai open **Customize** (where Plugins and Connectors
+   are) and go to the connectors list (direct link:
+   <https://claude.ai/customize/connectors>). Select **Add** → **Add custom connector**:
+   - Name **AI Hub**, and the URL from
+     `terraform -chdir=$HOME/openbao/infra/02-control output -raw connector_url`
+     (now `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`). **Continue**.
+   - Authentication: **Sign in now** (or **Sign in when needed**).
+   - OAuth client: **Use your own OAuth client**, with the client ID from
      `terraform -chdir=$HOME/openbao/infra/02-control output -raw connector_client_id`.
-     Leave the client secret empty; it is a public client.
-3. **Connect.** Press **Connect**. The Cognito page hands you to the Identity Center
-   portal; sign in as `agentgrid` with MFA, and you land back in claude.ai,
-   connected. The sign-in lasts 7 days; after that Claude asks you to reconnect.
-4. **Use it.** In a chat, turn **AI Hub** on in the tools ("+") menu. The connector
-   belongs to your claude.ai account, so it also appears in the Claude desktop and mobile
-   apps. Check it with "is the AI Hub up?": Claude should call `hub_status` and answer
-   up or down. Its tools: `hub_status`, `hub_up` (restores by default), `hub_down` (asks
-   you to confirm), `hub_ips`, `hub_allow_me_link`, `hub_revoke`, `hub_run_log`.
+     Leave the secret empty; it is a public client. If the dialog is all on one screen,
+     these are under **Advanced**. Don't pick "Use Claude's published identity" or
+     "Register automatically": Cognito supports neither.
+   - **Add**. Authentication settings can't be changed afterwards; to change them,
+     remove the connector and add it again.
+3. **Connect.** If the connector shows **Connect**, click it. The Cognito page hands you
+   to the Identity Center portal; sign in as `agentgrid` with MFA, and you land back in
+   claude.ai, connected. The sign-in lasts 7 days; after that Claude asks you to
+   reconnect.
+4. **Use it.** In a chat, click **+**, find **AI Hub** under Connectors (or Plugins) and
+   turn it on for that conversation. It belongs to your claude.ai account, so you can use
+   it from any browser you sign in to claude.ai with. Check it with "is the AI Hub up?":
+   Claude should call `hub_status` and answer up or down. Its tools: `hub_status`,
+   `hub_up` (restores by default), `hub_down` (asks you to confirm), `hub_ips`,
+   `hub_allow_me_link`, `hub_revoke`, `hub_run_log`.
 5. **After the Cognito pool is re-created** (`stack.sh` prints a reminder): your `sub` and
-   the client ID both change. Sign in once, repeat step 1 with the new `sub`, then in
-   claude.ai edit the connector (or remove and re-add it) with the new
-   `connector_client_id`, and connect again.
+   the client ID both change. Sign in once, repeat step 1 with the new `sub`. Then remove
+   the connector (<https://claude.ai/customize/connectors/yours> → select **AI Hub** →
+   **⋯** → **Remove**), add it again with the new `connector_client_id` (step 2), and
+   connect.
 
 ## Start it from the laptop (e.g. the next morning)
 
