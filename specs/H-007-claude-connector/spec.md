@@ -245,4 +245,5 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   **access** token 403 (confirms REQ-03: claude.ai must get the ID token); a refreshed ID
   token 200. The token's `iss` and `sub` (`a84183f0-…`) are the same as the user's in the
   UI and Slack, which is how kagent identifies the principal (HD-006), so the same user is
-  seen through every way in.
+  seen through every way in. Regression: a Slack DM to research-agent afterwards was
+  answered (the bridge's audience still accepted alongside the new one).
