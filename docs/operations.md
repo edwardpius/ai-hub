@@ -61,25 +61,25 @@ user pool is re-created (step 5). The run commands are from the laptop, signed i
    in the pool after you've signed in once through Identity Center (to OpenBao, say). List
    the pool's users with their `sub`:
    ```bash
-   POOL=$(terraform -chdir=~/openbao/infra/25-cognito output -raw user_pool_id)
+   POOL=$(terraform -chdir=$HOME/openbao/infra/25-cognito output -raw user_pool_id)
    aws cognito-idp list-users --user-pool-id "$POOL" \
      --query "Users[].[Username, Attributes[?Name=='sub'].Value | [0]]" --output text
    ```
-   Pick the federated user (its name starts with the identity provider's name, not
-   `obao-test-`). Or try step 3 first: a refused call logs `mcp refused`, reason
-   `not operator`, with your `sub`
+   Every user is named `IdentityCenter_<Identity Center user name>`. Pick yours
+   (`IdentityCenter_agentgrid`), not the `obao-test-*` test users. Or try step 3 first: a
+   refused call logs `mcp refused`, reason `not operator`, with your `sub`
    (`aws logs tail /aws/lambda/hub-control --since 15m | grep "mcp refused"`). Put the `sub`
    into `operator_cognito_subs` (see "Inputs" in the openbao-platform RUNBOOK) and apply
    layer 02 from the laptop (`scripts/stack.sh up` does it).
 2. **Add the connector.** claude.ai → Settings → Connectors → **Add custom connector**:
    - Name: **AI Hub**
-   - URL: `terraform -chdir=~/openbao/infra/02-control output -raw connector_url`
+   - URL: `terraform -chdir=$HOME/openbao/infra/02-control output -raw connector_url`
      (now `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`)
    - Advanced settings → OAuth Client ID:
-     `terraform -chdir=~/openbao/infra/02-control output -raw connector_client_id`.
+     `terraform -chdir=$HOME/openbao/infra/02-control output -raw connector_client_id`.
      Leave the client secret empty; it is a public client.
 3. **Connect.** Press **Connect**. The Cognito page hands you to the Identity Center
-   portal; sign in as your user (`EPius`) with MFA, and you land back in claude.ai,
+   portal; sign in as `agentgrid` with MFA, and you land back in claude.ai,
    connected. The sign-in lasts 7 days; after that Claude asks you to reconnect.
 4. **Use it.** In a chat, turn **AI Hub** on in the tools ("+") menu. The connector
    belongs to your claude.ai account, so it also appears in the Claude desktop and mobile
