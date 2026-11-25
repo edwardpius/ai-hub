@@ -36,11 +36,9 @@ doors, same actions:
   Durations are like `12h` or `3d` (max 30 days), or `permanent`; the default is 24 h.
 - **Limits:** at most 6 runs started per hour. One run at a time (a second waits). `down
   --all` and changes to the control plane itself (layer 02) only run from the laptop.
-- **Claude connector setup** (once, already done 2026-11-24): claude.ai → Settings →
-  Connectors → Add custom connector. URL `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`,
-  "Use your own OAuth client", client ID from
-  `terraform -chdir=~/openbao/infra/02-control output -raw connector_client_id`, no secret.
-  The sign-in lasts 7 days.
+- **Claude connector:** set up once (done 2026-11-24); see
+  [Set up the Claude connector](#set-up-the-claude-connector-once) below. The sign-in
+  lasts 7 days.
 - **When something's off:**
   - `/hub` answers "Not allowed": your Slack workspace or member ID isn't in SSM
     `/openbao-platform/tfvars/02-control`.
@@ -52,6 +50,46 @@ doors, same actions:
     link again.
   - Claude says the connector needs a sign-in: reconnect it (Settings → Connectors).
   - Anything else: hub-control's log, `aws logs tail /aws/lambda/hub-control --since 1h`.
+
+### Set up the Claude connector (once)
+
+Done 2026-11-24. Repeat these steps only on a new claude.ai account, or after the Cognito
+user pool is re-created (step 5). The run commands are from the laptop, signed in to AWS.
+
+1. **Allow your Cognito user.** The connector accepts only the Cognito `sub`s listed in
+   `operator_cognito_subs` in SSM `/openbao-platform/tfvars/02-control`. Your user exists
+   in the pool after you've signed in once through Identity Center (to OpenBao, say). List
+   the pool's users with their `sub`:
+   ```bash
+   POOL=$(terraform -chdir=~/openbao/infra/25-cognito output -raw user_pool_id)
+   aws cognito-idp list-users --user-pool-id "$POOL" \
+     --query "Users[].[Username, Attributes[?Name=='sub'].Value | [0]]" --output text
+   ```
+   Pick the federated user (its name starts with the identity provider's name, not
+   `obao-test-`). Or try step 3 first: a refused call logs `mcp refused`, reason
+   `not operator`, with your `sub`
+   (`aws logs tail /aws/lambda/hub-control --since 15m | grep "mcp refused"`). Put the `sub`
+   into `operator_cognito_subs` (see "Inputs" in the openbao-platform RUNBOOK) and apply
+   layer 02 from the laptop (`scripts/stack.sh up` does it).
+2. **Add the connector.** claude.ai → Settings → Connectors → **Add custom connector**:
+   - Name: **AI Hub**
+   - URL: `terraform -chdir=~/openbao/infra/02-control output -raw connector_url`
+     (now `https://fe22p319rg.execute-api.us-west-2.amazonaws.com/mcp`)
+   - Advanced settings → OAuth Client ID:
+     `terraform -chdir=~/openbao/infra/02-control output -raw connector_client_id`.
+     Leave the client secret empty; it is a public client.
+3. **Connect.** Press **Connect**. The Cognito page hands you to the Identity Center
+   portal; sign in as your user (`EPius`) with MFA, and you land back in claude.ai,
+   connected. The sign-in lasts 7 days; after that Claude asks you to reconnect.
+4. **Use it.** In a chat, turn **AI Hub** on in the tools ("+") menu. The connector
+   belongs to your claude.ai account, so it also appears in the Claude desktop and mobile
+   apps. Check it with "is the AI Hub up?": Claude should call `hub_status` and answer
+   up or down. Its tools: `hub_status`, `hub_up` (restores by default), `hub_down` (asks
+   you to confirm), `hub_ips`, `hub_allow_me_link`, `hub_revoke`, `hub_run_log`.
+5. **After the Cognito pool is re-created** (`stack.sh` prints a reminder): your `sub` and
+   the client ID both change. Sign in once, repeat step 1 with the new `sub`, then in
+   claude.ai edit the connector (or remove and re-add it) with the new
+   `connector_client_id`, and connect again.
 
 ## Start it from the laptop (e.g. the next morning)
 
