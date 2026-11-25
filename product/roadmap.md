@@ -83,3 +83,17 @@ in the thread, as the same user as in the kagent UI (HD-006).
   (golden set asked in Slack) passed, 10 of 10 (bar 8), median 67 s, median $0.30 a
   question (max $0.41), 0 invariant violations. EVAL-04 (a user not assigned in Identity
   Center can't link and gets no answer) passed. All H-006 evals passed.
+
+## Phase 6: research-agent from claude.ai
+
+**Goal:** A signed-in user asks research-agent from a Claude chat through a custom connector
+and gets the cited report, as the same user as in the kagent UI and Slack (HD-007).
+
+**Success criteria:**
+- Golden-set questions asked in claude.ai meet research-agent's bar, median under 3 minutes
+  and under $0.50.
+- A report asked for in claude.ai shows up for the same user in the UI.
+- Forged tokens are refused, and nothing but the connector's paths is reachable from
+  outside the allowlist.
+
+- [ ] claude.ai connector - remote MCP server in front of research-agent over A2A, Cognito sign-in, start/status/result tools `M` → H-007 (`specs/H-007-claude-connector/spec.md`). Q1 to Q4 open

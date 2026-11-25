@@ -154,3 +154,32 @@ and the 0.x template's agent-side Slack MCP server.
 **Revisit when:** kagent supports delegated (on-behalf-of) calls from a verified service
 identity; the ALB allowlist is opened to all users' addresses; or a second agent should be
 reachable from Slack (the bridge would route by agent).
+
+## HD-007: research-agent from claude.ai through an MCP connector (2026-11-25) · Status: proposed
+
+**Context:** You start and stop the hub from claude.ai (openbao-platform D-33) and want to
+ask research-agent from a Claude chat too. claude.ai connectors are remote MCP servers that
+claude.ai calls from Anthropic's servers, signing in with OAuth. The hub exposes nothing
+outside the ALB allowlist (HD-005), and `research-tools` has no Ingress by design (hub
+principle: no tool server outside the cluster except through the authenticated portal).
+
+**Decision (proposed, spec H-007):**
+- A small **`research-mcp`** service in `agents` serves MCP at `/research/mcp` on the kagent
+  host and calls research-agent over A2A **through the kagent oauth2-proxy** with the
+  caller's own Cognito token, the same path as the Slack bridge (HD-006).
+- Sign-in through a new public Cognito client with claude.ai's callback only and Identity
+  Center as the provider, using the OAuth pass-through pattern of D-33; claude.ai gets
+  Cognito's ID token as its access token, which oauth2-proxy checks. The server never makes
+  or stores tokens.
+- claude.ai reaches it either by an ALB rule admitting Anthropic's published ranges only for
+  `/research/*`, or by an MCP tunnel (H-007 Q1).
+- Start, status and result tools rather than one long call, because runs take minutes.
+
+**Consequences:** a third way in that shares conversations and reports with the UI and
+Slack. The authenticated portal now includes one path reachable from Anthropic's range
+(if Q1 (a)), with a check that nothing else is. claude.ai becomes an untrusted-input source
+and an outbound channel in research-agent's trifecta declaration.
+
+**Revisit when:** claude.ai supports a fixed per-organization egress or tunnels become
+available on your plan (removes the ALB rule); kagent supports delegated calls; a second
+agent should be reachable from claude.ai.
