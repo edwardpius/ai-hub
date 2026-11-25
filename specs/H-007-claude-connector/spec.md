@@ -37,7 +37,11 @@ mission of offering the hub's agents to signed-in users where they already work.
 - Resolved 2026-11-25 (Q2, who): any user assigned to the app in Identity Center, as the UI
   and Slack; identity and per-user isolation come from Cognito and kagent.
 - Resolved 2026-11-25 (Q3): yes, `list_my_reports` and `get_report`, read-only, the
-  caller's own reports only.
+  caller's own reports only. Built (task 4): the reports service has no list endpoint
+  (research-agent spec 026 serves one report by `/reports/<run>/<name>`), so
+  `list_my_reports` lists the runs started from claude.ai in the last 24 hours (server
+  memory) and points to the kagent UI for older ones; `get_report` reads any of the
+  caller's reports by its link. Follow-up: a list endpoint in the reports service.
 - Resolved 2026-11-25 (Q4): its own public repo, `research-mcp`, like `slack-bridge`.
 
 ## Requirements
@@ -233,6 +237,7 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
    D-35. Done 2026-11-25 (openbao-platform `447cda3`, applied; Results).
 4. The server (repo `research-mcp`): MCP over streamable HTTP, the OAuth pass-through and metadata
    (ported from hub-control), the A2A client (from `slack-bridge`), OTel, unit tests.
+   Done 2026-11-25: local repo `research-mcp` (Results); not on GitHub yet.
 5. Image (trixie, non-root, Trivy clean of fixable findings), release script, manifests in
    `deploy/agents/research-mcp.yaml` with a network policy (REQ-13).
 6. research-agent: add claude.ai to the trifecta declaration (doc only).
@@ -259,3 +264,10 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   (the load balancer controller creates it with the first route), so nothing answers from
   Anthropic's ranges before task 5. ECR `research-mcp` (immutable tags);
   `research-mcp-claude` now has only claude.ai's callback.
+- 2026-11-25, task 4: local repo `research-mcp` (Python, Starlette, `a2a-sdk` 1.3, PyJWT),
+  28 offline tests with a fake Cognito signing real RS256 tokens, a fake A2A endpoint and a
+  fake reports service. Guards checked by mutation (each fails a test when removed):
+  `token_use`, audience, run owner (REQ-07), one run per user (REQ-09), handing out the ID
+  token (REQ-03), the claude.ai-only redirect (REQ-02), the 404 mapping of `get_report`,
+  and no question in the logs (REQ-12). `HOLD_S` defaults to 45 s until EVAL-06; the
+  `debug_hold` probe tool appears only with `PROBE_TOOL=1`.

@@ -96,4 +96,4 @@ and gets the cited report, as the same user as in the kagent UI and Slack (HD-00
 - Forged tokens are refused, and nothing but the connector's paths is reachable from
   outside the allowlist.
 
-- [ ] claude.ai connector - remote MCP server in front of research-agent over A2A, Cognito sign-in, start/status/result tools `M` → H-007 (`specs/H-007-claude-connector/spec.md`). Questions answered 2026-11-25; task 2 (oauth2-proxy accepts the new client's ID token) passed 2026-11-25; task 3 (connector ALB, HD-008) applied 2026-11-25; next: task 4 (the research-mcp server)
+- [ ] claude.ai connector - remote MCP server in front of research-agent over A2A, Cognito sign-in, start/status/result tools `M` → H-007 (`specs/H-007-claude-connector/spec.md`). Questions answered 2026-11-25; task 2 (oauth2-proxy accepts the new client's ID token) passed 2026-11-25; task 3 (connector ALB, HD-008) applied 2026-11-25; task 4 (research-mcp, 28 offline tests) done 2026-11-25, local; next: task 5 (image, manifests, deploy)
