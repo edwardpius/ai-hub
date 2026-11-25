@@ -155,7 +155,7 @@ and the 0.x template's agent-side Slack MCP server.
 identity; the ALB allowlist is opened to all users' addresses; or a second agent should be
 reachable from Slack (the bridge would route by agent).
 
-## HD-007: research-agent from claude.ai through an MCP connector (2026-11-25) · Status: accepted
+## HD-007: research-agent from claude.ai through an MCP connector (2026-11-25) · Status: accepted; how claude.ai reaches it superseded by HD-008
 
 **Context:** You start and stop the hub from claude.ai (openbao-platform D-33) and want to
 ask research-agent from a Claude chat too. claude.ai connectors are remote MCP servers that
@@ -186,3 +186,22 @@ and an outbound channel in research-agent's trifecta declaration.
 **Revisit when:** claude.ai supports a fixed per-organization egress or tunnels become
 available on your plan (removes the ALB rule); kagent supports delegated calls; a second
 agent should be reachable from claude.ai.
+
+## HD-008: The research connector gets its own ALB (2026-11-25) · Status: accepted
+
+**Context:** HD-007 let Anthropic's ranges reach only `/research/*` on the kagent host. The
+hub ALB's allowlist turned out to be its security group (`sourceRanges`), which sees
+addresses, not paths: admitting Anthropic there opens kagent, Phoenix and OpenBao to that
+range, held back only by deny rules every route would need.
+
+**Decision:** a second internet-facing ALB (Gateway `connector`, openbao-platform D-35) with
+one HTTPS hostname, `research.<domain>`, routes only from `agents`, and a security group
+of Anthropic's outbound ranges plus your /32s. research-mcp serves `/mcp`, `/oauth/*` and
+`/.well-known/*` there. Supersedes HD-007's access bullet; the rest of HD-007 stands.
+
+**Consequences:** the hub ALB never sees Anthropic's range; a route added later can't be
+exposed by accident. About $0.03/hour more while the hub is up. Anyone calling from
+Anthropic's shared ranges can reach `research.<domain>`; the server's token check and
+oauth2-proxy's are what protect it.
+
+**Revisit when:** claude.ai offers per-organization egress or tunnels on your plan.

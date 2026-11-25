@@ -27,10 +27,13 @@ mission of offering the hub's agents to signed-in users where they already work.
 
 ## Resolved questions
 
-- Resolved 2026-11-25 (Q1, how claude.ai reaches the hub): an **ALB listener rule** admits
-  Anthropic's published outbound ranges (`160.79.104.0/21`, and `153.61.208.0/20` from the
-  API IP page) **only** for `/research/*` on the kagent host; everything else stays on your
-  /32s. MCP tunnels were ruled out: research preview, Claude Enterprise only.
+- Resolved 2026-11-25 (Q1, how claude.ai reaches the hub): a **second ALB** with its own
+  hostname, `research.<domain>`, admits Anthropic's published outbound ranges
+  (`160.79.104.0/21`, and `153.61.208.0/20` from the API IP page) plus your /32s, and has
+  only the research-mcp route (HD-008, openbao-platform D-35). The hub ALB is unchanged.
+  First answer was a path rule on the kagent host; dropped because the hub ALB's
+  allowlist is a security group, which can't scope by path. MCP tunnels were ruled out:
+  research preview, Claude Enterprise only.
 - Resolved 2026-11-25 (Q2, who): any user assigned to the app in Identity Center, as the UI
   and Slack; identity and per-user isolation come from Cognito and kagent.
 - Resolved 2026-11-25 (Q3): yes, `list_my_reports` and `get_report`, read-only, the
@@ -41,10 +44,10 @@ mission of offering the hub's agents to signed-in users where they already work.
 
 ### Sign-in
 
-- **REQ-01** THE SERVER SHALL serve MCP streamable HTTP at `/research/mcp` on the kagent
-  host, with Protected Resource Metadata (RFC 9728) and authorization-server metadata
+- **REQ-01** THE SERVER SHALL serve MCP streamable HTTP at `/mcp` on `research.<domain>`
+  (the connector ALB), with Protected Resource Metadata (RFC 9728) and authorization-server metadata
   (RFC 8414) at the matching `/.well-known/` paths, and a `WWW-Authenticate` header on 401.
-- **REQ-02** THE SERVER SHALL pass `/research/oauth/authorize` and `/research/oauth/token`
+- **REQ-02** THE SERVER SHALL pass `/oauth/authorize` and `/oauth/token`
   through to Cognito for one public PKCE client, `research-mcp-claude`, whose only callback
   is `https://claude.ai/api/mcp/auth_callback`, with Identity Center as the identity
   provider (as D-33).
@@ -52,7 +55,7 @@ mission of offering the hub's agents to signed-in users where they already work.
   token** as `access_token` (and pass the refresh token through), because oauth2-proxy
   accepts Cognito ID tokens with this client's audience as bearer tokens (H-006). It SHALL
   NOT create, sign or alter a token (as H-006 REQ-17).
-- **REQ-04** IF a request to `/research/mcp` has no bearer token, or one that fails
+- **REQ-04** IF a request to `/mcp` has no bearer token, or one that fails
   signature, `iss`, `aud`, `token_use=id` or expiry checks, THEN THE SERVER SHALL answer 401
   with `WWW-Authenticate` and call nothing.
 - **REQ-05** The refresh-token lifetime of `research-mcp-claude` SHALL be 7 days (as H-006
@@ -82,10 +85,10 @@ mission of offering the hub's agents to signed-in users where they already work.
 - **REQ-12** Tokens and refresh tokens SHALL never appear in logs, traces or tool output.
   The server stores no tokens: claude.ai holds them.
 - **REQ-13** THE SERVER's egress SHALL be limited to Cognito's endpoints and the kagent
-  oauth2-proxy Service; its ingress to `/research/*` on the kagent host.
-- **REQ-14** Only `/research/mcp`, `/research/oauth/*` and the `/.well-known/` paths for it
-  SHALL be reachable from outside your /32s. Every other path and host on the ALB SHALL
-  stay behind the allowlist.
+  oauth2-proxy Service; its ingress to the connector ALB only.
+- **REQ-14** Only `research.<domain>` (served by research-mcp alone) SHALL be reachable
+  from Anthropic's ranges. The hub ALB (kagent, Phoenix, OpenBao) SHALL stay behind your
+  /32s, and the connector ALB SHALL accept routes from the `agents` namespace only.
 - **REQ-15** WHEN the server is stopped THE kagent UI and Slack SHALL keep working, showing
   the conversations and reports started from claude.ai.
 
@@ -130,8 +133,8 @@ uses. Risk tier low.
   policy is unchanged.
 - **GUARD-02** claude.ai is a new untrusted-input source and a new outbound channel for
   report text: added to research-agent's trifecta declaration (doc only, as H-006 task 5).
-- **GUARD-03** The ALB opening is path-scoped (REQ-14) and has a check that fails if
-  another path answers from outside the allowlist (EVAL-05).
+- **GUARD-03** The opening is a separate ALB (REQ-14) with one hostname; a check fails if
+  a hub host answers from outside the allowlist or another route attaches (EVAL-05).
 - **GUARD-04** No credentials in the server: no client secret (public client), no stored
   tokens (REQ-12).
 
@@ -168,7 +171,7 @@ you allow it.
 - Structured log lines for refusals (`mcp refused` with the reason: no token, bad
   signature, wrong audience, expired, not assigned) and OAuth steps (status codes only),
   with the caller's source IP, to confirm Anthropic's ranges in practice.
-- ALB access logs for `/research/*` during the evals (what claude.ai sends, retries,
+- Connector ALB access logs during the evals (what claude.ai sends, retries,
   timing).
 - Cost per run is in research-agent's traces already; `via=claude` lets H-005's views split
   it out.
@@ -180,7 +183,7 @@ you allow it.
 |---|---|---|---|
 | FM-01 | One user reads another's run or report | owner check on run ID (REQ-07); reports by the caller's token | unit: two users; e2e: EVAL-04 |
 | FM-02 | A forged or self-signed token reaches the controller | server checks signature (REQ-04); oauth2-proxy checks again; server never makes tokens (REQ-03) | unit: forged tokens; e2e: EVAL-04 |
-| FM-03 | The ALB opening exposes the UI or other hosts to Anthropic's range | path-scoped rule (REQ-14) | EVAL-05 |
+| FM-03 | The ALB opening exposes the UI or other hosts to Anthropic's range | separate ALB, one hostname (REQ-14) | EVAL-05 |
 | FM-04 | claude.ai times out waiting and retries, starting a second run | short `research_start` (REQ-06), one run per user (REQ-09), hold-open below the timeout (REQ-10) | unit: duplicate call; EVAL-06 |
 | FM-05 | Removed user keeps access | 7-day refresh (REQ-05); oauth2-proxy and Cognito refuse after that | unit: expired token → 401 |
 | FM-06 | Token or secret in logs | redaction, test on captured output (REQ-12) | unit: log capture scan |
@@ -202,8 +205,9 @@ MCP flow cover REQ-01 to REQ-13. End to end from claude.ai, with the hub up:
   (REQ-06, REQ-15)
 - **EVAL-04** Unsigned, expired and other-client tokens are refused (401); a second user's
   run ID returns "not found". (REQ-04, REQ-07)
-- **EVAL-05** From an address outside your /32s, every path on the kagent, Phoenix and
-  OpenBao hosts except `/research/*` is refused by the ALB. (REQ-14)
+- **EVAL-05** From an address outside your /32s, the kagent, Phoenix and OpenBao hosts
+  don't answer; the connector ALB serves only `research.<domain>` (another Host header
+  gets 404) and lists one route. (REQ-14)
 - **EVAL-06** Timeout probe: a test tool that holds the call open 30, 60, 120, 240 s; record
   where claude.ai gives up and whether it retries; set REQ-10's hold-open from it. Run
   before EVAL-02.
@@ -212,7 +216,7 @@ MCP flow cover REQ-01 to REQ-13. End to end from claude.ai, with the hub up:
 - **Safety invariants (0 violations):**
   - no A2A call without a Cognito-issued token for the calling user
   - no token, secret or stack trace in tool output, logs or traces
-  - no path other than `/research/*` reachable from outside the allowlist
+  - no host other than `research.<domain>` reachable from outside the allowlist
   - no second concurrent run per user
 
 Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while it's up.
@@ -224,8 +228,9 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
    as a bearer token (as H-006 task 2; the `extra-jwt-issuers` entry) and that kagent sees
    the same principal as in the UI. Done 2026-11-25: passed (Results).
 3. openbao-platform: the `research-mcp-claude` Cognito client; the oauth2-proxy
-   `extra-jwt-issuers` entry; the `/research/*` route and the path-scoped ALB rule for
-   Anthropic's ranges; ECR repo; decision D-35.
+   `extra-jwt-issuers` entry; the connector ALB (`connector-gateway`, Anthropic's
+   ranges plus your /32s); ECR repo; remove the check's localhost callback; decision
+   D-35. Written 2026-11-25 (openbao-platform, layers 05, 25, 40), to apply.
 4. The server (repo `research-mcp`): MCP over streamable HTTP, the OAuth pass-through and metadata
    (ported from hub-control), the A2A client (from `slack-bridge`), OTel, unit tests.
 5. Image (trixie, non-root, Trivy clean of fixable findings), release script, manifests in

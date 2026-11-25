@@ -7,8 +7,8 @@ and proxy the Slack bridge uses. Tokens stay in this process: never printed or s
 
 Run from an allowed address with the hub up and AWS signed in:
     AWS_PROFILE=agentgrid python3 scripts/check-research-mcp-token.py
-Needs the TEMPORARY http://localhost:8976/callback on the client (openbao-platform
-layer 25); remove it in H-007 task 3.
+Needs http://localhost:8976/callback on the client (openbao-platform layer 25). It was
+removed after the check passed (2026-11-25); add it back temporarily to re-run.
 """
 import base64, hashlib, http.server, json, os, secrets, subprocess, sys, threading
 import urllib.error, urllib.parse, urllib.request, webbrowser
