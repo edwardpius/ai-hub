@@ -271,3 +271,11 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   token (REQ-03), the claude.ai-only redirect (REQ-02), the 404 mapping of `get_report`,
   and no question in the logs (REQ-12). `HOLD_S` defaults to 45 s until EVAL-06; the
   `debug_hold` probe tool appears only with `PROBE_TOOL=1`.
+- 2026-11-25, task 5 deployed: image `8cb4024` (Trivy: the first build had 4 fixable
+  Starlette findings, 2 HIGH; Starlette 1.10 rebuilt clean, 0 fixable in Debian and
+  Python), openbao-platform `8aa1a05` (layer 50: `kv/projects/research-mcp/cognito`).
+  Argo CD synced in about 7 minutes: ExternalSecret synced, pod ready, the connector ALB
+  gained its HTTPS listener and one healthy target, ExternalDNS wrote
+  `research.<domain>`. From outside: `/mcp` without a token 401 with the
+  `resource_metadata` challenge; both discovery documents served; `/oauth/authorize` with
+  an unknown client 400; another Host header on the connector ALB 404.
