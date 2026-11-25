@@ -18,7 +18,7 @@ on and the rules every agent must meet to join.
 | [product/decisions.md](product/decisions.md) | Why things are the way they are |
 
 The workflow is the same as research-agent's
-([research-agent/WORKFLOW.md](../research-agent/WORKFLOW.md)): status only in the roadmap,
+(`WORKFLOW.md` in the private research-agent repo): status only in the roadmap,
 EARS requirements with stable IDs, `[NEEDS CLARIFICATION]` blocks implementation, and a
 box is ticked only when its acceptance checks pass. Hub specs are numbered `H-NNN` and are
 written in the cluster repo.
