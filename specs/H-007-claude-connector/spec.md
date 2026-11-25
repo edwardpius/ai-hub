@@ -287,3 +287,12 @@ Model spend for the evals: about $3–4 (EVAL-02, as H-006), plus the hub while 
   (REQ-10), the ALB unchanged; `research_result` says "still running" and Claude calls
   again. Probe tool removed. Same log: calls came from `160.79.106.x` (inside Anthropic's
   `160.79.104.0/21`), and the sign-in's token exchange returned 200 (EVAL-01, sign-in part).
+- 2026-11-25, **EVAL-02 passed: 10 of 10** (bar 8), research-agent's golden set
+  (`specs/007-research-cli`, k=1) asked in a claude.ai chat through the Research
+  connector, graded from the hub's traces and reports as H-006 EVAL-01 (the runner waited
+  for each run's trace instead of sending the question). 0 invariant violations; median
+  76 s (p90 121 s, max 124 s); median $0.33 a question (max $0.48); $3.14 + judge $0.16;
+  Claude Opus 4.6 on Bedrock (the image's model); support judge off (the hub keeps no page
+  text). Server side: 10 runs finished, 21 `research_result` calls (about two polls a run
+  at `HOLD_S` 45 s), no refusals or errors. EVAL-01 passed with it (connector added by the
+  `operations.md` steps, signed in as `agentgrid`, tools listed and used).
